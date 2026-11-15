@@ -1,6 +1,6 @@
 # WEB FERN · WEB NEST · WEB TRAIL
 
-Three Claude skills that work together to plan travel:
+Three Claude skills that work together to plan travel. **Showcase site:** https://rileyschroderstudent-oss.github.io/fern-nest-trail/
 
 | Skill | Full name | What it does |
 |---|---|---|
