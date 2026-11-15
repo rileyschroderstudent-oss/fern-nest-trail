@@ -69,6 +69,8 @@ A trip plan has to finish inside one 5-hour usage window, or it fails, so WEB TR
 - Best location or most comfortable (stay goals): to WEB NEST as given, and to WEB FERN as best value.
 - No goal (skipped or unanswered): WEB FERN uses cheapest and WEB NEST best value, their own defaults. Don't infer one.
 
+**Ballpark with no dates** ("ballpark", "what would it cost", no interview): don't stop to ask for dates. Price a representative window instead: the next shoulder or off-peak window that's bookable (usually 2–4 months out), with the trip length given, and name it as assumed. Still run step 2's research (at least the exchange rate and entry costs) and WEB FERN in quick mode for real fares; typical accommodation prices per stop are enough. Add one line on how much peak dates (school holidays, Christmas, the destination's peaks) would add.
+
 For any other trip (family, a different group, a road trip), ask for group size, budget, dates, interests and accommodation style in one batch. Use sensible defaults for the rest, and say what you assumed.
 
 ## 2. Research before the interview
