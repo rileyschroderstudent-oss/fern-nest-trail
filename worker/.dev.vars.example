@@ -1,0 +1,9 @@
+# Local development only. Copy to .dev.vars (gitignored): cp .dev.vars.example .dev.vars
+# These values override the vars in wrangler.jsonc when running `npm run dev`.
+MOCK_ANTHROPIC=1
+ALLOWED_ORIGINS=http://localhost:8788
+# Cloudflare Turnstile test secret that always passes.
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+# Throwaway local values. Never reuse them in production.
+SESSION_SECRET=0000000000000000000000000000000000000000000000000000000000000001
+IP_HASH_SALT=0000000000000000000000000000000000000000000000000000000000000002
