@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TRAIL demo: plan a trip with an estimated budget</title>
+<meta name="description" content="An estimate-only demo that runs WEB TRAIL through the Claude API. No live prices, no booking.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..900&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./app.css">
+<script type="module" src="./app.js"></script>
+</head>
+<body>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <a class="brand" href="../">
+      <span class="badge">FNT</span>
+      <span class="brand-name">TRAIL demo</span>
+    </a>
+    <a class="header-link" href="../">About the skills</a>
+  </div>
+</header>
+
+<p class="ai-line"><span class="wrap">You're using an AI system (Claude), not talking to a person. Every price here is an estimate.</span></p>
+
+<main class="wrap">
+
+  <div id="closed" class="panel panel-dark" hidden>
+    <h2 id="closed-heading" tabindex="-1">The demo is closed</h2>
+    <p id="closed-text"></p>
+  </div>
+
+  <div id="notice" class="notice" role="alert" tabindex="-1" hidden></div>
+
+  <!-- Screen 1: Brief -->
+  <section id="screen-brief" class="screen" aria-labelledby="brief-heading">
+    <h1 id="brief-heading" tabindex="-1">Plan a trip</h1>
+    <p class="lede">Describe the trip. You'll get three or four questions, then a day-by-day plan with an itemised cost estimate in Australian dollars.</p>
+
+    <form id="brief-form" class="card" novalidate>
+      <fieldset id="brief-fields" class="plain">
+        <legend class="visually-hidden">Trip brief</legend>
+
+        <div class="grid">
+          <div class="field" data-field="destination">
+            <label for="f-destination">Destination</label>
+            <input id="f-destination" name="destination" type="text" required minlength="2" maxlength="60" autocomplete="off" aria-describedby="e-destination">
+            <p class="field-error" id="e-destination"></p>
+          </div>
+
+          <div class="field" data-field="origin">
+            <label for="f-origin">Flying from</label>
+            <input id="f-origin" name="origin" type="text" required minlength="2" maxlength="40" value="Brisbane" autocomplete="off" aria-describedby="e-origin">
+            <p class="field-error" id="e-origin"></p>
+          </div>
+
+          <div class="field" data-field="travellers">
+            <label for="f-travellers">Travellers</label>
+            <input id="f-travellers" name="travellers" type="number" required min="1" max="8" step="1" inputmode="numeric" aria-describedby="h-travellers e-travellers">
+            <p class="hint" id="h-travellers">1 to 8 people</p>
+            <p class="field-error" id="e-travellers"></p>
+          </div>
+
+          <div class="field" data-field="nights">
+            <label for="f-nights">Nights</label>
+            <input id="f-nights" name="nights" type="number" required min="2" max="21" step="1" inputmode="numeric" aria-describedby="h-nights e-nights">
+            <p class="hint" id="h-nights">2 to 21 nights</p>
+            <p class="field-error" id="e-nights"></p>
+          </div>
+
+          <div class="field" data-field="month">
+            <label for="f-month">Month</label>
+            <select id="f-month" name="month" aria-describedby="e-month">
+              <option value="0">Flexible</option>
+              <option value="1">January</option>
+              <option value="2">February</option>
+              <option value="3">March</option>
+              <option value="4">April</option>
+              <option value="5">May</option>
+              <option value="6">June</option>
+              <option value="7">July</option>
+              <option value="8">August</option>
+              <option value="9">September</option>
+              <option value="10">October</option>
+              <option value="11">November</option>
+              <option value="12">December</option>
+            </select>
+            <p class="field-error" id="e-month"></p>
+          </div>
+
+          <div class="field" data-field="year">
+            <label for="f-year">Year</label>
+            <input id="f-year" name="year" type="number" required step="1" inputmode="numeric" aria-describedby="e-year">
+            <p class="field-error" id="e-year"></p>
+          </div>
+
+          <div class="field" data-field="budgetPerPersonAud">
+            <label for="f-budget">Budget per person (A$)</label>
+            <input id="f-budget" name="budgetPerPersonAud" type="number" required min="300" max="30000" step="1" inputmode="numeric" aria-describedby="h-budget e-budgetPerPersonAud">
+            <p class="hint" id="h-budget">A$300 to A$30,000, everything included</p>
+            <div class="check">
+              <input id="f-budget-unsure" name="budgetUnsure" type="checkbox" aria-describedby="h-budget-unsure">
+              <label for="f-budget-unsure">Not sure</label>
+            </div>
+            <p class="visually-hidden" id="h-budget-unsure">Sends no budget, so the plan has nothing to compare against.</p>
+            <p class="field-error" id="e-budgetPerPersonAud"></p>
+          </div>
+
+          <div class="field" data-field="goal">
+            <label for="f-goal">Goal</label>
+            <select id="f-goal" name="goal" aria-describedby="e-goal">
+              <option value="cheapest">Cheapest</option>
+              <option value="best_value" selected>Best value</option>
+              <option value="best_location">Best location</option>
+              <option value="most_comfortable">Most comfortable</option>
+            </select>
+            <p class="field-error" id="e-goal"></p>
+          </div>
+
+          <div class="field" data-field="pace">
+            <label for="f-pace">Pace</label>
+            <select id="f-pace" name="pace" aria-describedby="e-pace">
+              <option value="relaxed">Relaxed</option>
+              <option value="balanced" selected>Balanced</option>
+              <option value="packed">Packed</option>
+            </select>
+            <p class="field-error" id="e-pace"></p>
+          </div>
+        </div>
+
+        <div class="field" data-field="interests">
+          <label for="f-interests">Interests <span class="optional">(optional)</span></label>
+          <input id="f-interests" name="interests" type="text" maxlength="200" autocomplete="off" aria-describedby="c-interests e-interests">
+          <p class="counter" id="c-interests" aria-live="polite">0 / 200</p>
+          <p class="field-error" id="e-interests"></p>
+        </div>
+
+        <div class="field" data-field="notes">
+          <label for="f-notes">Anything else <span class="optional">(optional)</span></label>
+          <textarea id="f-notes" name="notes" rows="3" maxlength="300" aria-describedby="h-notes c-notes e-notes"></textarea>
+          <p class="hint" id="h-notes">Don't enter personal details such as names, contact details or passport numbers.</p>
+          <p class="counter" id="c-notes" aria-live="polite">0 / 300</p>
+          <p class="field-error" id="e-notes"></p>
+        </div>
+
+        <div id="turnstile" class="turnstile"></div>
+
+        <div class="actions">
+          <button id="brief-submit" class="btn btn-primary" type="submit">Get my questions</button>
+        </div>
+      </fieldset>
+      <p id="brief-working" class="working" aria-live="polite"></p>
+    </form>
+  </section>
+
+  <!-- Screen 2: Questions -->
+  <section id="screen-questions" class="screen" aria-labelledby="questions-heading" hidden>
+    <h1 id="questions-heading" tabindex="-1">A few questions</h1>
+    <div class="card">
+      <h2 class="small-heading">What we assumed</h2>
+      <ul id="q-assumptions" class="list"></ul>
+    </div>
+    <form id="questions-form" class="card" novalidate>
+      <div id="q-list"></div>
+      <div class="actions">
+        <button id="questions-submit" class="btn btn-primary" type="submit" disabled>Write my plan</button>
+        <button id="questions-restart" class="btn btn-secondary" type="button">Start again</button>
+      </div>
+      <p id="questions-working" class="working" aria-live="polite"></p>
+    </form>
+  </section>
+
+  <!-- Screen 3: Plan -->
+  <section id="screen-plan" class="screen" aria-labelledby="plan-title" hidden>
+    <p class="banner">Every price here is an estimate from an AI model's general knowledge, to about mid-2026. Nothing was searched or checked live. Check prices, availability and entry rules yourself before you book.</p>
+
+    <h1 id="plan-title" tabindex="-1"></h1>
+    <ol id="plan-route" class="route"></ol>
+    <p id="plan-season" class="season"></p>
+
+    <div id="plan-verdict" class="panel panel-dark verdict"></div>
+
+    <div class="card">
+      <h2>Budget</h2>
+      <div id="plan-budget"></div>
+    </div>
+
+    <div class="card">
+      <h2>Honest take</h2>
+      <p id="plan-honest"></p>
+    </div>
+
+    <div class="card">
+      <h2>Ways to cut the cost</h2>
+      <ul id="plan-levers" class="list"></ul>
+    </div>
+
+    <div class="card">
+      <h2>Day by day</h2>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th scope="col">Day</th><th scope="col">Base</th><th scope="col">Plan</th></tr></thead>
+          <tbody id="plan-days"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Where to stay</h2>
+      <div id="plan-stays" class="stays"></div>
+    </div>
+
+    <div class="card">
+      <h2>Flights</h2>
+      <dl id="plan-flights" class="defs"></dl>
+    </div>
+
+    <div class="card">
+      <h2>Check before you book</h2>
+      <ul id="plan-verify" class="list"></ul>
+      <p class="fixed-link">Entry rules and travel advice: <a href="https://www.smartraveller.gov.au" rel="noopener">Smartraveller, www.smartraveller.gov.au</a></p>
+    </div>
+
+    <div class="card">
+      <h2>Assumptions</h2>
+      <ul id="plan-assumptions" class="list"></ul>
+    </div>
+
+    <div id="plan-warnings-card" class="card card-warn" hidden>
+      <h2>Warnings</h2>
+      <ul id="plan-warnings" class="list"></ul>
+    </div>
+
+    <footer class="plan-footer">
+      <p id="plan-meta"></p>
+      <div class="actions no-print">
+        <button id="plan-new" class="btn btn-primary" type="button">Start a new trip</button>
+        <button id="plan-print" class="btn btn-secondary" type="button">Print</button>
+      </div>
+    </footer>
+  </section>
+
+</main>
+</body>
+</html>
