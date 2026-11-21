@@ -11,6 +11,7 @@ import {
   CONTINGENCY_FAR_MONTHS,
 } from './config.js';
 import { callModel } from './anthropic.js';
+import { buildMessage } from './messages.js';
 import { shapeQuestions, shapePlan } from './postvalidate.js';
 import { validateStartBody, validatePlanBody, validateAnswers } from './validate.js';
 import { issueSession, verifySession, hasUsableSecret } from './session.js';
@@ -122,19 +123,6 @@ export function contingencyPct(brief, now) {
 
 const isoSeconds = (now) => now.toISOString().replace(/\.\d{3}Z$/, 'Z');
 
-// Temporary message builder in the SPEC.md 4.9 format. Task 7 replaces it with messages.js.
-function devMessage(stage, brief, now) {
-  const label = stage === 'start' ? 'questions' : stage;
-  const last = stage === 'start' ? 'Write the interview questions.' : 'Write the trip plan.';
-  return [
-    `Today is ${now.toISOString().slice(0, 10)} (UTC).`,
-    `STAGE: ${label}`,
-    '<trip_brief>',
-    JSON.stringify(brief),
-    '</trip_brief>',
-    last,
-  ].join('\n');
-}
 
 const bodyError = (problem) => ({ ok: false, fields: [{ name: 'body', problem }] });
 
@@ -193,7 +181,7 @@ async function trailStart(request, env) {
   if (!valid.ok) return invalidInput(env, request, valid.fields);
   const { brief } = valid.value;
 
-  const result = await callModel(env, 'start', devMessage('start', brief, now));
+  const result = await callModel(env, 'start', buildMessage('start', { brief }, now));
   const failure = modelFailure(env, request, result.kind);
   if (failure) return failure;
 
@@ -225,7 +213,7 @@ async function trailPlan(request, env) {
   const answers = validateAnswers(valid.value.answers, questions);
   if (!answers.ok) return invalidInput(env, request, answers.fields);
 
-  const result = await callModel(env, 'plan', devMessage('plan', brief, now));
+  const result = await callModel(env, 'plan', buildMessage('plan', { brief, questions, answers: answers.value }, now));
   const failure = modelFailure(env, request, result.kind);
   if (failure) return failure;
 
