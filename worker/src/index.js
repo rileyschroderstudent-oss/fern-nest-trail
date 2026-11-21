@@ -1,6 +1,7 @@
 // Router, CORS and the error envelope (SPEC.md 4.3 and 4.4).
 import {
   VERSION,
+  BODY_LIMIT_BYTES,
   BRIEF_LIMITS,
   VISITOR_TRIPS_PER_DAY,
   PRICES,
@@ -11,6 +12,7 @@ import {
 } from './config.js';
 import { callModel } from './anthropic.js';
 import { shapeQuestions, shapePlan } from './postvalidate.js';
+import { validateStartBody, validatePlanBody } from './validate.js';
 
 // Known routes and the methods each accepts. A known path with another method
 // gets 405; an unknown path gets 404.
@@ -148,14 +150,32 @@ function devMessage(stage, brief, now) {
   ].join('\n');
 }
 
-async function readJson(request) {
+const bodyError = (problem) => ({ ok: false, fields: [{ name: 'body', problem }] });
+
+// Reads a JSON body (SPEC.md 4.3 step 6 and Task 5): checks its size in bytes against
+// the route's limit, requires Content-Type: application/json, decodes it as UTF-8 and
+// parses it. Returns { ok: true, body } or { ok: false, fields }.
+async function readJsonBody(request, limitBytes) {
+  const declared = Number(request.headers.get('Content-Length'));
+  if (Number.isFinite(declared) && declared > limitBytes) return bodyError('too_large');
+
+  const bytes = await request.arrayBuffer();
+  if (bytes.byteLength > limitBytes) return bodyError('too_large');
+
+  const mediaType = (request.headers.get('Content-Type') || '').split(';')[0].trim().toLowerCase();
+  if (mediaType !== 'application/json') return bodyError('content_type');
+
+  let body;
   try {
-    const body = JSON.parse(await request.text());
-    return body !== null && typeof body === 'object' && !Array.isArray(body) ? body : null;
+    body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
   } catch {
-    return null;
+    return bodyError('invalid_json');
   }
+  if (body === null || typeof body !== 'object' || Array.isArray(body)) return bodyError('not_an_object');
+  return { ok: true, body };
 }
+
+const invalidInput = (env, request, fields) => errorResponse(env, request, 400, 'invalid_input', { fields });
 
 // Maps a failed or refused model call to its response. Returns null when kind is 'ok'.
 function modelFailure(env, request, kind) {
@@ -179,15 +199,14 @@ function modelFailure(env, request, kind) {
 }
 
 async function trailStart(request, env) {
-  const body = await readJson(request);
-  const brief = body?.brief;
-  if (brief === null || typeof brief !== 'object' || Array.isArray(brief)) {
-    return errorResponse(env, request, 400, 'invalid_input', {
-      fields: [{ name: 'brief', problem: 'required' }],
-    });
-  }
+  const read = await readJsonBody(request, BODY_LIMIT_BYTES.start);
+  if (!read.ok) return invalidInput(env, request, read.fields);
 
   const now = new Date();
+  const valid = validateStartBody(read.body, now);
+  if (!valid.ok) return invalidInput(env, request, valid.fields);
+  const { brief } = valid.value;
+
   const result = await callModel(env, 'start', devMessage('start', brief, now));
   const failure = modelFailure(env, request, result.kind);
   if (failure) return failure;
@@ -205,12 +224,10 @@ async function trailStart(request, env) {
 }
 
 async function trailPlan(request, env) {
-  const body = await readJson(request);
-  if (!body) {
-    return errorResponse(env, request, 400, 'invalid_input', {
-      fields: [{ name: 'body', problem: 'invalid_json' }],
-    });
-  }
+  const read = await readJsonBody(request, BODY_LIMIT_BYTES.plan);
+  if (!read.ok) return invalidInput(env, request, read.fields);
+  const valid = validatePlanBody(read.body);
+  if (!valid.ok) return invalidInput(env, request, valid.fields);
 
   const brief = DEV_BRIEF;
   const now = new Date();

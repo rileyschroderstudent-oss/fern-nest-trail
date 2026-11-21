@@ -4,6 +4,9 @@ import { getStatus, startTrip, planTrip, errorText, DECLINE_TEXT } from './api.j
 import { computeBudget, fitVerdict } from './budget.js';
 
 const STORAGE_KEY = 'fnt-trail-state-v1';
+// Cloudflare's documented test token, which the local test secret accepts. Task 9
+// replaces it with the token from the Turnstile widget.
+const PLACEHOLDER_TURNSTILE_TOKEN = 'XXXX.DUMMY.TOKEN.XXXX';
 const $ = (id) => document.getElementById(id);
 
 // ---- Small DOM helpers ----------------------------------------------------------
@@ -213,6 +216,7 @@ const FIELD_RULES = {
   origin: 'Enter 2 to 40 characters.',
   travellers: 'Enter a whole number from 1 to 8.',
   nights: 'Enter a whole number from 2 to 21.',
+  month: 'That month has already passed. Pick a later month or year.',
   year: 'Enter a year from this year to two years ahead.',
   budgetPerPersonAud: 'Enter a whole number from 300 to 30,000, or tick Not sure.',
   interests: 'Keep it to 200 characters.',
@@ -280,7 +284,7 @@ async function onBriefSubmit(event) {
   if (!checkForm()) return;
 
   const done = startWorking($('brief-submit'), $('brief-working'));
-  const result = await startTrip({ brief: briefFromForm() });
+  const result = await startTrip({ brief: briefFromForm(), turnstileToken: PLACEHOLDER_TURNSTILE_TOKEN });
   done();
 
   if (!result.ok) return handleError(result, 'brief');
