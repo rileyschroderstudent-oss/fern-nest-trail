@@ -2,3 +2,5 @@ node_modules/
 .wrangler/
 .dev.vars
 SPEC.md
+PROMPT.md
+RUNLOG.md

@@ -2,6 +2,7 @@
 // Each function returns { ok: true, value, warnings } or { ok: false, outcome }.
 // A decline is a valid result: { ok: true, value: { type: 'declined', reason }, warnings: [] }.
 import { QUESTIONS_LIMITS as QL, PLAN_LIMITS as PL, REQUIRED_CATEGORIES } from './config.js';
+import { QUESTIONS_SCHEMA, PLAN_SCHEMA } from './schemas.js';
 
 export const BANNED_PHRASE = new RegExp(
   [
@@ -46,24 +47,47 @@ function cut(s, max) {
 }
 
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
-const isStringArray = (v) => Array.isArray(v) && v.every((s) => typeof s === 'string');
+
+// True if value matches the subset of JSON Schema the two 4.6 schemas use: type
+// (object, array, string, integer), enum, required, additionalProperties: false
+// and items. A missing property, an extra property, a wrong type, a value outside
+// its enum or a null array entry all fail (SPEC.md 4.7, last row of each table).
+export function matchesSchema(value, schema) {
+  if (schema.enum && !schema.enum.includes(value)) return false;
+  switch (schema.type) {
+    case 'string':
+      return typeof value === 'string';
+    case 'integer':
+      return Number.isInteger(value);
+    case 'array':
+      return Array.isArray(value) && value.every((v) => matchesSchema(v, schema.items));
+    case 'object': {
+      if (!isObject(value)) return false;
+      const props = schema.properties;
+      if (!schema.required.every((k) => Object.hasOwn(value, k))) return false;
+      if (schema.additionalProperties === false && Object.keys(value).some((k) => !Object.hasOwn(props, k))) {
+        return false;
+      }
+      return Object.entries(value).every(([k, v]) => matchesSchema(v, props[k]));
+    }
+    default:
+      return false;
+  }
+}
 
 export function shapeQuestions(raw) {
-  if (!isObject(raw)) return fail('invalid_plan');
+  const bad = fail('invalid_questions');
+  if (!isObject(raw)) return bad;
   if (raw.status === 'declined') return declined(raw);
-  if (raw.status !== 'ok') return fail('invalid_plan');
-  if (!isStringArray(raw.assumptions) || !Array.isArray(raw.questions)) return fail('invalid_plan');
+  if (!matchesSchema(raw, QUESTIONS_SCHEMA)) return bad;
   if (hasBannedPhrase(raw)) return fail('banned_phrase');
 
   const kept = raw.questions.slice(0, QL.maxQuestions);
-  if (kept.length < QL.minQuestions) return fail('invalid_plan');
+  if (kept.length < QL.minQuestions) return bad;
 
   const questions = [];
   for (const [i, q] of kept.entries()) {
-    if (!isObject(q) || typeof q.text !== 'string' || typeof q.why !== 'string' || !isStringArray(q.options)) {
-      return fail('invalid_plan');
-    }
-    if (q.options.length < QL.minOptions) return fail('invalid_plan');
+    if (q.options.length < QL.minOptions) return bad;
     questions.push({
       id: `q${i + 1}`,
       text: cut(q.text, QL.textChars),
@@ -79,15 +103,10 @@ export function shapeQuestions(raw) {
   return { ok: true, value: { assumptions, questions }, warnings: [] };
 }
 
-const PLAN_ARRAYS = ['route', 'days', 'budget_items', 'levers', 'verify_before_booking', 'assumptions'];
-const PLAN_STRINGS = ['title', 'season_note', 'honest_take'];
-
 export function shapePlan(raw, brief) {
   if (!isObject(raw)) return fail('invalid_plan');
   if (raw.status === 'declined') return declined(raw);
-  if (raw.status !== 'ok') return fail('invalid_plan');
-  if (PLAN_ARRAYS.some((k) => !Array.isArray(raw[k]))) return fail('invalid_plan');
-  if (PLAN_STRINGS.some((k) => typeof raw[k] !== 'string') || !isObject(raw.flights)) return fail('invalid_plan');
+  if (!matchesSchema(raw, PLAN_SCHEMA)) return fail('invalid_plan');
   if (hasBannedPhrase(raw)) return fail('banned_phrase');
 
   // Counts.
@@ -100,17 +119,14 @@ export function shapePlan(raw, brief) {
   // Numbers.
   if (hasNegativeNumber(raw)) return fail('invalid_plan');
   for (const stop of raw.route) {
-    if (!isObject(stop) || !Number.isInteger(stop.nights) || stop.nights < PL.minRouteNights) return fail('invalid_plan');
+    if (stop.nights < PL.minRouteNights) return fail('invalid_plan');
   }
   for (const item of raw.budget_items) {
-    if (!isObject(item)) return fail('invalid_plan');
-    if (!Number.isInteger(item.units) || item.units < PL.minUnits || item.units > PL.maxUnits) return fail('invalid_plan');
-    for (const k of ['unit_low_aud', 'unit_high_aud']) {
-      if (!Number.isInteger(item[k]) || item[k] > PL.maxUnitCostAud) return fail('invalid_plan');
-    }
+    if (item.units < PL.minUnits || item.units > PL.maxUnits) return fail('invalid_plan');
+    if (item.unit_low_aud > PL.maxUnitCostAud || item.unit_high_aud > PL.maxUnitCostAud) return fail('invalid_plan');
   }
 
-  const limit = (s, max = PL.otherChars) => cut(String(s), max);
+  const limit = (s, max = PL.otherChars) => cut(s, max);
 
   const route = raw.route.map((s) => ({
     place: limit(s.place),

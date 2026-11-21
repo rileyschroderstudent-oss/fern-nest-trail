@@ -46,11 +46,11 @@ describe('shapeQuestions: 4.7 output table', () => {
   test('row 1: fewer than 2 questions, or a question with fewer than 2 options, is bad output', () => {
     const few = questions();
     few.questions = few.questions.slice(0, 1);
-    assert.deepEqual(shapeQuestions(few), { ok: false, outcome: 'invalid_plan' });
+    assert.deepEqual(shapeQuestions(few), { ok: false, outcome: 'invalid_questions' });
 
     const thin = questions();
     thin.questions[1].options = ['only one'];
-    assert.deepEqual(shapeQuestions(thin), { ok: false, outcome: 'invalid_plan' });
+    assert.deepEqual(shapeQuestions(thin), { ok: false, outcome: 'invalid_questions' });
   });
 
   test('row 2: more than 4 questions, or more than 4 options, drops the extras', () => {
@@ -98,6 +98,33 @@ describe('shapeQuestions: 4.7 output table', () => {
       const raw = questions();
       mutate(raw);
       assert.deepEqual(shapeQuestions(raw), { ok: false, outcome: 'banned_phrase' });
+    }
+  });
+
+  test('row 6: a type or enum mismatch, a missing property or a null array entry is bad output', () => {
+    const mutations = [
+      (q) => { q.status = 'maybe'; },
+      (q) => { q.decline_reason = 'bored'; },
+      (q) => { q.assumptions = 'one assumption'; },
+      (q) => { q.assumptions[0] = 7; },
+      (q) => { q.questions[0].text = 42; },
+      (q) => { q.questions[1].options[0] = { label: 'x' }; },
+      (q) => { q.questions[2] = 'a question'; },
+      (q) => { delete q.questions[0].why; },
+      (q) => { delete q.assumptions; },
+      (q) => { q.questions[0].extra = 'not in the schema'; },
+      (q) => { q.questions[1] = null; },
+      (q) => { q.assumptions[1] = null; },
+      (q) => { q.questions[0].options[2] = null; },
+    ];
+    for (const mutate of mutations) {
+      const raw = questions();
+      mutate(raw);
+      assert.doesNotThrow(() => shapeQuestions(raw));
+      assert.deepEqual(shapeQuestions(raw), { ok: false, outcome: 'invalid_questions' }, mutate.toString());
+    }
+    for (const raw of [null, 'text', [], 5]) {
+      assert.deepEqual(shapeQuestions(raw), { ok: false, outcome: 'invalid_questions' });
     }
   });
 });
@@ -274,6 +301,43 @@ describe('shapePlan: 4.7 output table', () => {
       const raw = plan();
       mutate(raw);
       assert.deepEqual(shapePlan(raw, BRIEF), { ok: false, outcome: 'banned_phrase' });
+    }
+  });
+
+  test('row 10: a type or enum mismatch, a missing property or a null array entry is bad output', () => {
+    const mutations = [
+      (p) => { p.status = 'maybe'; },
+      (p) => { p.decline_reason = 'bored'; },
+      (p) => { p.budget_items[0].basis = 'per_dog'; },
+      (p) => { p.budget_items[1].category = 'souvenirs'; },
+      (p) => { p.days[2].day = 2.5; },
+      (p) => { p.days[2].day = '3'; },
+      (p) => { p.route[0].nights = 3.5; },
+      (p) => { p.budget_items[0].unit_low_aud = 99.9; },
+      (p) => { p.levers[0].saves_per_person_aud = '50'; },
+      (p) => { p.title = 12; },
+      (p) => { p.flights = 'Fly via Singapore'; },
+      (p) => { p.flights.peak_warning = null; },
+      (p) => { p.verify_before_booking[0] = 3; },
+      (p) => { delete p.honest_take; },
+      (p) => { delete p.route[1].area_reason; },
+      (p) => { delete p.flights.timing; },
+      (p) => { p.budget_items[0].source = 'not in the schema'; },
+      (p) => { p.days = 'thirteen days'; },
+      (p) => { p.route[2] = null; },
+      (p) => { p.days[0] = null; },
+      (p) => { p.budget_items[3] = null; },
+      (p) => { p.levers[1] = null; },
+      (p) => { p.assumptions[0] = null; },
+    ];
+    for (const mutate of mutations) {
+      const raw = plan();
+      mutate(raw);
+      assert.doesNotThrow(() => shapePlan(raw, BRIEF));
+      assert.deepEqual(shapePlan(raw, BRIEF), { ok: false, outcome: 'invalid_plan' }, mutate.toString());
+    }
+    for (const raw of [null, 'text', [], 5]) {
+      assert.deepEqual(shapePlan(raw, BRIEF), { ok: false, outcome: 'invalid_plan' });
     }
   });
 });
