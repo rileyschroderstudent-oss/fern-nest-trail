@@ -11,6 +11,7 @@ import {
   base64urlDecode,
 } from '../src/session.js';
 import worker from '../src/index.js';
+import { testEnv, testCtx } from './d1.js';
 
 const ENV = { SESSION_SECRET: 'a'.repeat(64) };
 const NOW = new Date('2026-11-22T03:00:00Z');
@@ -162,29 +163,25 @@ describe('SESSION_SECRET', () => {
   });
 
   test('model routes return internal_error with a short secret, before any model call', async () => {
-    const env = { ALLOWED_ORIGINS: 'http://localhost:8788', MODEL: 'claude-haiku-5-5', MOCK_ANTHROPIC: '1', SESSION_SECRET: 'short' };
+    const env = testEnv({ SESSION_SECRET: 'short' });
     const res = await worker.fetch(new Request('http://localhost:8787/api/trail/start', {
       method: 'POST',
       headers: { Origin: 'http://localhost:8788', 'Content-Type': 'application/json' },
       body: JSON.stringify({ brief: BRIEF, turnstileToken: 'x' }),
-    }), env, { waitUntil() {} });
+    }), env, testCtx());
     assert.equal(res.status, 500);
     assert.equal((await res.json()).error.code, 'internal_error');
   });
 });
 
 describe('router: /start and /plan with tokens', () => {
-  const env = {
-    ALLOWED_ORIGINS: 'http://localhost:8788',
-    MODEL: 'claude-haiku-5-5',
-    MOCK_ANTHROPIC: '1',
-    SESSION_SECRET: ENV.SESSION_SECRET,
-  };
+  // A fresh database per request keeps these tests clear of the burst limit.
+  const env = { SESSION_SECRET: ENV.SESSION_SECRET };
   const post = (path, body) => worker.fetch(new Request(`http://localhost:8787${path}`, {
     method: 'POST',
     headers: { Origin: 'http://localhost:8788', 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  }), env, { waitUntil() {} });
+  }), testEnv({ SESSION_SECRET: ENV.SESSION_SECRET }), testCtx());
   const start = async (destination) => (await post('/api/trail/start', {
     brief: { ...BRIEF, destination }, turnstileToken: 'x',
   })).json();

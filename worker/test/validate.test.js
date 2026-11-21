@@ -13,6 +13,7 @@ import {
   validatePlanBody,
 } from '../src/validate.js';
 import worker from '../src/index.js';
+import { testEnv, testCtx } from './d1.js';
 
 const NOW = new Date('2026-11-22T03:00:00Z'); // November 2026, UTC
 const BRIEF = {
@@ -342,17 +343,12 @@ describe('validateRevision', () => {
 });
 
 describe('router: body checks', () => {
-  const ENV = {
-    ALLOWED_ORIGINS: 'http://localhost:8788',
-    MODEL: 'claude-haiku-5-5',
-    MOCK_ANTHROPIC: '1',
-    SESSION_SECRET: 'test-secret-that-is-at-least-32-characters',
-  };
+  // A fresh database per request keeps these tests clear of the burst limit.
   const post = (path, body, headers = {}) => worker.fetch(new Request(`http://localhost:8787${path}`, {
     method: 'POST',
     headers: { Origin: 'http://localhost:8788', 'Content-Type': 'application/json', ...headers },
     body,
-  }), ENV, { waitUntil() {} });
+  }), testEnv(), testCtx());
   const startBody = (changes = {}) => JSON.stringify({ brief: brief(changes), turnstileToken: 'XXXX.DUMMY.TOKEN.XXXX' });
   const errorOf = async (res) => (await res.json()).error;
 

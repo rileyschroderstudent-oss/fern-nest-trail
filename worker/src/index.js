@@ -3,7 +3,6 @@ import {
   VERSION,
   BODY_LIMIT_BYTES,
   BRIEF_LIMITS,
-  VISITOR_TRIPS_PER_DAY,
   PRICES,
   MAX_REVISIONS,
   CONTINGENCY_PCT,
@@ -15,6 +14,17 @@ import { buildMessage } from './messages.js';
 import { shapeQuestions, shapePlan } from './postvalidate.js';
 import { validateStartBody, validatePlanBody, validateAnswers } from './validate.js';
 import { issueSession, verifySession, hasUsableSecret } from './session.js';
+import {
+  LOCAL_IP,
+  limitsFor,
+  ipHash,
+  countBurst,
+  admit,
+  settle,
+  cleanup,
+  demoStatus,
+  outcomeOf,
+} from './limits.js';
 
 // Known routes and the methods each accepts. A known path with another method
 // gets 405; an unknown path gets 404.
@@ -30,6 +40,7 @@ const ERROR_MESSAGES = {
   method_not_allowed: 'Method not allowed.',
   invalid_input: 'Invalid input.',
   forbidden_origin: 'Origin not allowed.',
+  rate_limited: 'Too many requests.',
   invalid_session: 'This trip cannot be continued.',
   session_expired: 'This trip has expired.',
   demo_closed: 'The demo is closed.',
@@ -95,17 +106,21 @@ function preflight(env, request) {
   });
 }
 
-function status(env, request) {
+// GET /api/status: no limits and no model call. open, reason and reopensAt come
+// from DEMO_ENABLED and the global counters (Task 8).
+async function status(env, request) {
+  const limits = limitsFor(env);
+  const { open, reason, reopensAt } = await demoStatus(env, new Date(), limits);
   return json(env, request, 200, {
     ok: true,
-    open: true,
-    reason: null,
-    reopensAt: null,
+    open,
+    reason,
+    reopensAt,
     mock: env.MOCK_ANTHROPIC === '1',
     model: env.MODEL,
     version: VERSION,
     limits: {
-      tripsPerVisitorPerDay: VISITOR_TRIPS_PER_DAY,
+      tripsPerVisitorPerDay: limits.VISITOR_TRIPS_PER_DAY,
       maxNights: BRIEF_LIMITS.nights.max,
       maxTravellers: BRIEF_LIMITS.travellers.max,
     },
@@ -172,7 +187,35 @@ function modelFailure(env, request, kind) {
   }
 }
 
-async function trailStart(request, env) {
+// The response for a refused admission: 429 rate_limited with Retry-After, or 503
+// demo_closed with reopensAt.
+function refused(env, request, decision) {
+  if (decision.code === 'rate_limited') {
+    return errorResponse(env, request, 429, 'rate_limited', { retryAfterSeconds: decision.retryAfterSeconds });
+  }
+  return errorResponse(env, request, 503, 'demo_closed', { reopensAt: decision.reopensAt ?? null });
+}
+
+const backgroundOf = (ctx) => (promise) => {
+  // Accounting runs after the response. A failed write is dropped silently: nothing
+  // about the request may be logged, and the Console spend limit sits behind it.
+  const quiet = promise.catch(() => {});
+  if (ctx && typeof ctx.waitUntil === 'function') ctx.waitUntil(quiet);
+};
+
+// Calls the model, shapes its output, and settles the cost and the usage_log row in
+// the background (4.3 steps 9, 10 and 12).
+async function runModel(env, ctx, stage, message, shape) {
+  const started = Date.now();
+  const result = await callModel(env, stage, message);
+  const duration_ms = Date.now() - started;
+  const shaped = result.kind === 'ok' ? shape(result.json) : null;
+  const record = { stage, model: env.MODEL, usage: result.usage, duration_ms, outcome: outcomeOf(result.kind, shaped) };
+  backgroundOf(ctx)(settle(env, record, new Date()));
+  return { result, shaped };
+}
+
+async function trailStart(request, env, ctx, hash) {
   const read = await readJsonBody(request, BODY_LIMIT_BYTES.start);
   if (!read.ok) return invalidInput(env, request, read.fields);
 
@@ -181,11 +224,12 @@ async function trailStart(request, env) {
   if (!valid.ok) return invalidInput(env, request, valid.fields);
   const { brief } = valid.value;
 
-  const result = await callModel(env, 'start', buildMessage('start', { brief }, now));
+  const admission = await admit(env, hash, 'start', now);
+  if (!admission.ok) return refused(env, request, admission);
+
+  const { result, shaped } = await runModel(env, ctx, 'start', buildMessage('start', { brief }, now), shapeQuestions);
   const failure = modelFailure(env, request, result.kind);
   if (failure) return failure;
-
-  const shaped = shapeQuestions(result.json);
   if (!shaped.ok) return errorResponse(env, request, 502, 'bad_model_output');
   if (shaped.value.type === 'declined') return json(env, request, 200, shaped.value);
 
@@ -197,7 +241,7 @@ async function trailStart(request, env) {
   });
 }
 
-async function trailPlan(request, env) {
+async function trailPlan(request, env, ctx, hash) {
   const read = await readJsonBody(request, BODY_LIMIT_BYTES.plan);
   if (!read.ok) return invalidInput(env, request, read.fields);
   const valid = validatePlanBody(read.body);
@@ -213,11 +257,13 @@ async function trailPlan(request, env) {
   const answers = validateAnswers(valid.value.answers, questions);
   if (!answers.ok) return invalidInput(env, request, answers.fields);
 
-  const result = await callModel(env, 'plan', buildMessage('plan', { brief, questions, answers: answers.value }, now));
+  const admission = await admit(env, hash, 'plan', now);
+  if (!admission.ok) return refused(env, request, admission);
+
+  const message = buildMessage('plan', { brief, questions, answers: answers.value }, now);
+  const { result, shaped } = await runModel(env, ctx, 'plan', message, (raw) => shapePlan(raw, brief));
   const failure = modelFailure(env, request, result.kind);
   if (failure) return failure;
-
-  const shaped = shapePlan(result.json, brief);
   if (!shaped.ok) return errorResponse(env, request, 502, 'bad_model_output');
   if (shaped.value.type === 'declined') return json(env, request, 200, shaped.value);
 
@@ -234,7 +280,7 @@ async function trailPlan(request, env) {
   });
 }
 
-async function route(request, env) {
+async function route(request, env, ctx) {
   const { pathname } = new URL(request.url);
   const method = request.method;
 
@@ -255,8 +301,24 @@ async function route(request, env) {
   // Tokens cannot be signed or checked without a long enough secret (SPEC.md Task 6).
   if (!hasUsableSecret(env)) return errorResponse(env, request, 500, 'internal_error');
 
-  if (pathname === '/api/trail/start') return trailStart(request, env);
-  if (pathname === '/api/trail/plan') return trailPlan(request, env);
+  if (!env.DB || typeof env.IP_HASH_SALT !== 'string' || !env.IP_HASH_SALT) {
+    return errorResponse(env, request, 500, 'internal_error');
+  }
+
+  // 4.3 step 4: the kill switch.
+  if (env.DEMO_ENABLED === '0') return errorResponse(env, request, 503, 'demo_closed');
+
+  // 4.3 step 5: every POST this minute counts, including rejected ones.
+  const now = new Date();
+  const hash = await ipHash(env, request.headers.get('CF-Connecting-IP') || LOCAL_IP, now);
+  const burst = await countBurst(env, hash, now);
+  if (!burst.ok) return refused(env, request, burst);
+
+  if (pathname === '/api/trail/start') {
+    backgroundOf(ctx)(cleanup(env, now));
+    return trailStart(request, env, ctx, hash);
+  }
+  if (pathname === '/api/trail/plan') return trailPlan(request, env, ctx, hash);
 
   // /api/trail/revise arrives in Task 11.
   return errorResponse(env, request, 404, 'not_found');
