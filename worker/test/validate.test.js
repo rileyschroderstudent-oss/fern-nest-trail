@@ -342,7 +342,12 @@ describe('validateRevision', () => {
 });
 
 describe('router: body checks', () => {
-  const ENV = { ALLOWED_ORIGINS: 'http://localhost:8788', MODEL: 'claude-haiku-5-5', MOCK_ANTHROPIC: '1' };
+  const ENV = {
+    ALLOWED_ORIGINS: 'http://localhost:8788',
+    MODEL: 'claude-haiku-5-5',
+    MOCK_ANTHROPIC: '1',
+    SESSION_SECRET: 'test-secret-that-is-at-least-32-characters',
+  };
   const post = (path, body, headers = {}) => worker.fetch(new Request(`http://localhost:8787${path}`, {
     method: 'POST',
     headers: { Origin: 'http://localhost:8788', 'Content-Type': 'application/json', ...headers },
@@ -389,7 +394,18 @@ describe('router: body checks', () => {
   });
 
   test('a valid /start and /plan still return 200', async () => {
-    assert.equal((await post('/api/trail/start', startBody())).status, 200);
-    assert.equal((await post('/api/trail/plan', JSON.stringify({ session: 'dev', answers: [] }))).status, 200);
+    const start = await post('/api/trail/start', startBody());
+    assert.equal(start.status, 200);
+    const { session, questions } = await start.json();
+    const answers = questions.map((q) => ({ questionId: q.id, optionId: q.options[0].id }));
+    assert.equal((await post('/api/trail/plan', JSON.stringify({ session, answers }))).status, 200);
+  });
+
+  test('/plan checks the answers against the questions in the token', async () => {
+    const { session, questions } = await (await post('/api/trail/start', startBody())).json();
+    const answers = questions.slice(1).map((q) => ({ questionId: q.id, optionId: 'a' }));
+    const res = await post('/api/trail/plan', JSON.stringify({ session, answers }));
+    assert.equal(res.status, 400);
+    assert.deepEqual((await errorOf(res)).fields, [{ name: 'answers', problem: 'wrong_count' }]);
   });
 });

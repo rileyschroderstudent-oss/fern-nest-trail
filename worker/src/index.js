@@ -12,7 +12,8 @@ import {
 } from './config.js';
 import { callModel } from './anthropic.js';
 import { shapeQuestions, shapePlan } from './postvalidate.js';
-import { validateStartBody, validatePlanBody } from './validate.js';
+import { validateStartBody, validatePlanBody, validateAnswers } from './validate.js';
+import { issueSession, verifySession, hasUsableSecret } from './session.js';
 
 // Known routes and the methods each accepts. A known path with another method
 // gets 405; an unknown path gets 404.
@@ -28,6 +29,8 @@ const ERROR_MESSAGES = {
   method_not_allowed: 'Method not allowed.',
   invalid_input: 'Invalid input.',
   forbidden_origin: 'Origin not allowed.',
+  invalid_session: 'This trip cannot be continued.',
+  session_expired: 'This trip has expired.',
   demo_closed: 'The demo is closed.',
   upstream_busy: 'Claude is busy. Try again in a minute.',
   upstream_error: 'Claude could not be reached.',
@@ -35,23 +38,6 @@ const ERROR_MESSAGES = {
   internal_error: 'Something went wrong.',
 };
 
-// Until Task 6 issues real session tokens, every session is this literal string.
-const DEV_SESSION = 'dev';
-
-// Until Task 6 carries the brief in the token, /plan uses the SPEC.md 4.4 example brief.
-const DEV_BRIEF = {
-  destination: 'Vietnam',
-  origin: 'Brisbane',
-  travellers: 4,
-  nights: 12,
-  month: 7,
-  year: 2027,
-  budgetPerPersonAud: 3200,
-  goal: 'best_value',
-  pace: 'balanced',
-  interests: 'food, hiking, history',
-  notes: '',
-};
 
 function allowedOrigins(env) {
   return String(env.ALLOWED_ORIGINS || '')
@@ -219,7 +205,7 @@ async function trailStart(request, env) {
     type: 'questions',
     assumptions: shaped.value.assumptions,
     questions: shaped.value.questions,
-    session: DEV_SESSION,
+    session: await issueSession(env, { stage: 'questions', brief, questions: shaped.value.questions }, now),
   });
 }
 
@@ -229,8 +215,16 @@ async function trailPlan(request, env) {
   const valid = validatePlanBody(read.body);
   if (!valid.ok) return invalidInput(env, request, valid.fields);
 
-  const brief = DEV_BRIEF;
   const now = new Date();
+  const session = await verifySession(env, valid.value.session, { stage: 'questions', now });
+  if (!session.ok) {
+    return errorResponse(env, request, session.code === 'session_expired' ? 410 : 401, session.code);
+  }
+  const { brief, questions } = session.payload;
+
+  const answers = validateAnswers(valid.value.answers, questions);
+  if (!answers.ok) return invalidInput(env, request, answers.fields);
+
   const result = await callModel(env, 'plan', devMessage('plan', brief, now));
   const failure = modelFailure(env, request, result.kind);
   if (failure) return failure;
@@ -247,7 +241,7 @@ async function trailPlan(request, env) {
     travellers: brief.travellers,
     budgetPerPersonAud: brief.budgetPerPersonAud,
     generatedAt: isoSeconds(now),
-    session: DEV_SESSION,
+    session: await issueSession(env, { stage: 'plan', revs: 0, brief, questions, answers: answers.value }, now),
     revisionsLeft: MAX_REVISIONS,
   });
 }
@@ -270,6 +264,8 @@ async function route(request, env) {
 
   // An unpriced model can never run uncapped (SPEC.md 4.8).
   if (!Object.hasOwn(PRICES, env.MODEL)) return errorResponse(env, request, 500, 'internal_error');
+  // Tokens cannot be signed or checked without a long enough secret (SPEC.md Task 6).
+  if (!hasUsableSecret(env)) return errorResponse(env, request, 500, 'internal_error');
 
   if (pathname === '/api/trail/start') return trailStart(request, env);
   if (pathname === '/api/trail/plan') return trailPlan(request, env);
