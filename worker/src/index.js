@@ -1,5 +1,16 @@
 // Router, CORS and the error envelope (SPEC.md 4.3 and 4.4).
-import { VERSION, BRIEF_LIMITS, VISITOR_TRIPS_PER_DAY } from './config.js';
+import {
+  VERSION,
+  BRIEF_LIMITS,
+  VISITOR_TRIPS_PER_DAY,
+  PRICES,
+  MAX_REVISIONS,
+  CONTINGENCY_PCT,
+  CONTINGENCY_FAR_PCT,
+  CONTINGENCY_FAR_MONTHS,
+} from './config.js';
+import { callModel } from './anthropic.js';
+import { shapeQuestions, shapePlan } from './postvalidate.js';
 
 // Known routes and the methods each accepts. A known path with another method
 // gets 405; an unknown path gets 404.
@@ -13,8 +24,31 @@ const ROUTES = {
 const ERROR_MESSAGES = {
   not_found: 'Not found.',
   method_not_allowed: 'Method not allowed.',
+  invalid_input: 'Invalid input.',
   forbidden_origin: 'Origin not allowed.',
+  demo_closed: 'The demo is closed.',
+  upstream_busy: 'Claude is busy. Try again in a minute.',
+  upstream_error: 'Claude could not be reached.',
+  bad_model_output: 'The model returned malformed output.',
   internal_error: 'Something went wrong.',
+};
+
+// Until Task 6 issues real session tokens, every session is this literal string.
+const DEV_SESSION = 'dev';
+
+// Until Task 6 carries the brief in the token, /plan uses the SPEC.md 4.4 example brief.
+const DEV_BRIEF = {
+  destination: 'Vietnam',
+  origin: 'Brisbane',
+  travellers: 4,
+  nights: 12,
+  month: 7,
+  year: 2027,
+  budgetPerPersonAud: 3200,
+  goal: 'best_value',
+  pace: 'balanced',
+  interests: 'food, hiking, history',
+  notes: '',
 };
 
 function allowedOrigins(env) {
@@ -89,6 +123,118 @@ function status(env, request) {
   });
 }
 
+// 15 when month is set and the travel month is 12 or more months after the current
+// UTC month; otherwise 10 (SPEC.md 4.7).
+export function contingencyPct(brief, now) {
+  if (brief.month === 0) return CONTINGENCY_PCT;
+  const travel = brief.year * 12 + (brief.month - 1);
+  const current = now.getUTCFullYear() * 12 + now.getUTCMonth();
+  return travel - current >= CONTINGENCY_FAR_MONTHS ? CONTINGENCY_FAR_PCT : CONTINGENCY_PCT;
+}
+
+const isoSeconds = (now) => now.toISOString().replace(/\.\d{3}Z$/, 'Z');
+
+// Temporary message builder in the SPEC.md 4.9 format. Task 7 replaces it with messages.js.
+function devMessage(stage, brief, now) {
+  const label = stage === 'start' ? 'questions' : stage;
+  const last = stage === 'start' ? 'Write the interview questions.' : 'Write the trip plan.';
+  return [
+    `Today is ${now.toISOString().slice(0, 10)} (UTC).`,
+    `STAGE: ${label}`,
+    '<trip_brief>',
+    JSON.stringify(brief),
+    '</trip_brief>',
+    last,
+  ].join('\n');
+}
+
+async function readJson(request) {
+  try {
+    const body = JSON.parse(await request.text());
+    return body !== null && typeof body === 'object' && !Array.isArray(body) ? body : null;
+  } catch {
+    return null;
+  }
+}
+
+// Maps a failed or refused model call to its response. Returns null when kind is 'ok'.
+function modelFailure(env, request, kind) {
+  switch (kind) {
+    case 'ok':
+      return null;
+    case 'refusal':
+      return json(env, request, 200, { type: 'declined', reason: 'other' });
+    case 'truncated':
+    case 'invalid_json':
+      return errorResponse(env, request, 502, 'bad_model_output');
+    case 'demo_closed':
+      return errorResponse(env, request, 503, 'demo_closed');
+    case 'upstream_busy':
+      return errorResponse(env, request, 502, 'upstream_busy');
+    case 'upstream_error':
+      return errorResponse(env, request, 502, 'upstream_error');
+    default:
+      return errorResponse(env, request, 500, 'internal_error');
+  }
+}
+
+async function trailStart(request, env) {
+  const body = await readJson(request);
+  const brief = body?.brief;
+  if (brief === null || typeof brief !== 'object' || Array.isArray(brief)) {
+    return errorResponse(env, request, 400, 'invalid_input', {
+      fields: [{ name: 'brief', problem: 'required' }],
+    });
+  }
+
+  const now = new Date();
+  const result = await callModel(env, 'start', devMessage('start', brief, now));
+  const failure = modelFailure(env, request, result.kind);
+  if (failure) return failure;
+
+  const shaped = shapeQuestions(result.json);
+  if (!shaped.ok) return errorResponse(env, request, 502, 'bad_model_output');
+  if (shaped.value.type === 'declined') return json(env, request, 200, shaped.value);
+
+  return json(env, request, 200, {
+    type: 'questions',
+    assumptions: shaped.value.assumptions,
+    questions: shaped.value.questions,
+    session: DEV_SESSION,
+  });
+}
+
+async function trailPlan(request, env) {
+  const body = await readJson(request);
+  if (!body) {
+    return errorResponse(env, request, 400, 'invalid_input', {
+      fields: [{ name: 'body', problem: 'invalid_json' }],
+    });
+  }
+
+  const brief = DEV_BRIEF;
+  const now = new Date();
+  const result = await callModel(env, 'plan', devMessage('plan', brief, now));
+  const failure = modelFailure(env, request, result.kind);
+  if (failure) return failure;
+
+  const shaped = shapePlan(result.json, brief);
+  if (!shaped.ok) return errorResponse(env, request, 502, 'bad_model_output');
+  if (shaped.value.type === 'declined') return json(env, request, 200, shaped.value);
+
+  return json(env, request, 200, {
+    type: 'plan',
+    plan: shaped.value,
+    warnings: shaped.warnings,
+    contingencyPct: contingencyPct(brief, now),
+    travellers: brief.travellers,
+    budgetPerPersonAud: brief.budgetPerPersonAud,
+    generatedAt: isoSeconds(now),
+    session: DEV_SESSION,
+    revisionsLeft: MAX_REVISIONS,
+  });
+}
+
 async function route(request, env) {
   const { pathname } = new URL(request.url);
   const method = request.method;
@@ -105,7 +251,13 @@ async function route(request, env) {
 
   if (pathname === '/api/status') return status(env, request);
 
-  // The trail routes are added in later tasks.
+  // An unpriced model can never run uncapped (SPEC.md 4.8).
+  if (!Object.hasOwn(PRICES, env.MODEL)) return errorResponse(env, request, 500, 'internal_error');
+
+  if (pathname === '/api/trail/start') return trailStart(request, env);
+  if (pathname === '/api/trail/plan') return trailPlan(request, env);
+
+  // /api/trail/revise arrives in Task 11.
   return errorResponse(env, request, 404, 'not_found');
 }
 
