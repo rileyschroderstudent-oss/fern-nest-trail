@@ -209,6 +209,28 @@ describe('router: /start and /plan with tokens', () => {
     assert.equal((await res.json()).error.code, 'bad_model_output');
   });
 
+  test('a /plan body between 8 and 16 KB is accepted: a worst-case token with accented text', async () => {
+    // Every question and option at its length limit, in 2-byte characters.
+    const questions = Array.from({ length: 4 }, (_, i) => ({
+      id: `q${i + 1}`,
+      text: 'é'.repeat(200),
+      options: ['a', 'b', 'c', 'd'].map((id) => ({ id, label: 'é'.repeat(120) })),
+    }));
+    const session = await issueSession(env, { stage: 'questions', brief: BRIEF, questions }, new Date());
+    const body = { session, answers: answersFor(questions) };
+    const bytes = new TextEncoder().encode(JSON.stringify(body)).length;
+    assert.ok(bytes > 8 * 1024 && bytes < 16 * 1024, `body is ${bytes} bytes`);
+    const res = await post('/api/trail/plan', body);
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).type, 'plan');
+  });
+
+  test('a /plan body over 16 KB returns 400 too_large', async () => {
+    const res = await post('/api/trail/plan', { session: 'x'.repeat(16 * 1024), answers: [] });
+    assert.equal(res.status, 400);
+    assert.deepEqual((await res.json()).error.fields, [{ name: 'body', problem: 'too_large' }]);
+  });
+
   test('a plan-stage token cannot be used on /plan; a tampered one is invalid', async () => {
     const q = await start('Vietnam');
     const plan = await (await post('/api/trail/plan', { session: q.session, answers: answersFor(q.questions) })).json();

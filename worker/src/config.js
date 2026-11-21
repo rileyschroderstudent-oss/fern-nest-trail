@@ -6,7 +6,7 @@ export const VERSION = '1.0.0';
 // ---- 4.4 Request bodies -------------------------------------------------------
 export const BODY_LIMIT_BYTES = {
   start: 8 * 1024,
-  plan: 8 * 1024,
+  plan: 16 * 1024, // the session token rides in this body (raised from 8 KB, SPEC.md v3)
   revise: 64 * 1024,
 };
 
