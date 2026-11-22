@@ -44,7 +44,7 @@ It cannot book anything. WEB FERN and WEB NEST are not in the app yet.
 - A static page on GitHub Pages. A Cloudflare Worker holds the API key and is the
   only thing that calls Claude.
 - The model returns line items as structured JSON. Totals, contingency and the
-  fits-the-budget verdict come from a function I wrote by hand
+  fits-the-budget verdict come from a tested function, not the model
   (`docs/app/budget.js`, tests in `docs/app/budget.test.mjs`).
 - The Worker stores no trip content. It keeps counters and a log of token counts and cost.
 - Design notes: [ARCHITECTURE.md](ARCHITECTURE.md)
@@ -77,8 +77,8 @@ Measured cost per run: [NEEDS: average from usage-report.sql, number of runs, da
 ### How it was made
 I set the constraints: a Worker in front of the API, estimate-only, one skill first,
 hard cost caps. The detailed spec was drafted with Claude and reviewed by me.
-Claude wrote most of the code from that spec. I wrote `budget.js`, ran the model
-comparison and the guardrail tests, and deployed it.
+Claude wrote the code from that spec. I reviewed it, ran the model comparison
+and the guardrail tests, and deployed it.
 
 ## Install
 

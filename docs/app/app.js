@@ -20,7 +20,7 @@ const STORAGE_KEY = 'fnt-trail-state-v1';
 // index.html can be served new modules, because GitHub Pages ignores ?v= and serves
 // the current file. When the page and the modules disagree, the page reloads once
 // to ./?v=<MODULE_VERSION>, a URL with no cached copy, so a fresh index.html arrives.
-const MODULE_VERSION = '2026-11-22.5';
+const MODULE_VERSION = '2026-11-22.7';
 const $ = (id) => document.getElementById(id);
 
 // ---- Small DOM helpers ----------------------------------------------------------
@@ -515,7 +515,7 @@ const VERDICT_LABEL = {
   no_budget: 'No budget given',
 };
 
-const TOTALS_UNAVAILABLE = 'Totals unavailable: budget.js is not implemented yet';
+const TOTALS_UNAVAILABLE = 'Totals unavailable for this plan.';
 
 // Runs budget.js. Returns { budget, verdict } or null if it throws.
 function computeTotals(data) {
