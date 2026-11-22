@@ -2,11 +2,9 @@
 // Every piece of model-written text goes on the page with textContent only.
 import { getStatus, startTrip, planTrip, errorText, DECLINE_TEXT } from './api.js';
 import { computeBudget, fitVerdict } from './budget.js';
+import { CONFIG } from './config.js';
 
 const STORAGE_KEY = 'fnt-trail-state-v1';
-// Cloudflare's documented test token, which the local test secret accepts. Task 9
-// replaces it with the token from the Turnstile widget.
-const PLACEHOLDER_TURNSTILE_TOKEN = 'XXXX.DUMMY.TOKEN.XXXX';
 const $ = (id) => document.getElementById(id);
 
 // ---- Small DOM helpers ----------------------------------------------------------
@@ -275,6 +273,36 @@ function showServerFieldErrors(error) {
   return first;
 }
 
+// ---- Turnstile (SPEC.md Task 9) ------------------------------------------------------
+// index.html loads api.js from Cloudflare with render=explicit; the widget is drawn
+// here with the site key from config.js. A token works once and expires after five
+// minutes, so the widget is reset after every /start response.
+
+let turnstileWidget = null;
+let turnstileToken = '';
+
+const CHECK_NOT_READY = "The browser check hasn't finished yet. Wait a moment and try again. If no check appears, reload the page.";
+
+function renderTurnstile() {
+  if (turnstileWidget !== null || !window.turnstile) return;
+  turnstileWidget = window.turnstile.render('#turnstile', {
+    sitekey: CONFIG.turnstileSiteKey,
+    callback: (token) => { turnstileToken = token; },
+    'expired-callback': () => { turnstileToken = ''; },
+    'error-callback': () => { turnstileToken = ''; },
+  });
+}
+
+function setupTurnstile() {
+  if (window.turnstile) renderTurnstile();
+  else $('turnstile-api').addEventListener('load', renderTurnstile);
+}
+
+function resetTurnstile() {
+  turnstileToken = '';
+  if (window.turnstile && turnstileWidget !== null) window.turnstile.reset(turnstileWidget);
+}
+
 async function onBriefSubmit(event) {
   event.preventDefault();
   if (busy) return;
@@ -283,9 +311,12 @@ async function onBriefSubmit(event) {
   save();
   if (!checkForm()) return;
 
+  if (!turnstileToken) return showNotice(CHECK_NOT_READY);
+
   const done = startWorking($('brief-submit'), $('brief-working'));
-  const result = await startTrip({ brief: briefFromForm(), turnstileToken: PLACEHOLDER_TURNSTILE_TOKEN });
+  const result = await startTrip({ brief: briefFromForm(), turnstileToken });
   done();
+  resetTurnstile(); // after every /start response, success or failure
 
   if (!result.ok) return handleError(result, 'brief');
   const data = result.data;
@@ -607,6 +638,7 @@ function init() {
   $('plan-print').addEventListener('click', () => window.print());
 
   showScreen(state.screen, { focus: false });
+  setupTurnstile();
   loadStatus();
 }
 

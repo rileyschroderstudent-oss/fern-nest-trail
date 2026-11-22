@@ -58,6 +58,25 @@ export function createD1() {
   };
 }
 
+// Cloudflare's published Turnstile test secrets and dummy token.
+export const TURNSTILE_PASS_SECRET = '1x0000000000000000000000000000000AA';
+export const TURNSTILE_FAIL_SECRET = '2x0000000000000000000000000000000AA';
+export const TURNSTILE_DUMMY_TOKEN = 'XXXX.DUMMY.TOKEN.XXXX';
+
+// Router tests run through the global fetch. This stand-in answers siteverify the way
+// the test secrets do and refuses every other URL, so no test reaches the network.
+// Tests that need a different reply can still pass their own fetchImpl.
+globalThis.fetch = async (url, init = {}) => {
+  if (String(url) !== 'https://challenges.cloudflare.com/turnstile/v0/siteverify') {
+    throw new Error(`test fetch refused: ${url}`);
+  }
+  const form = new URLSearchParams(String(init.body || ''));
+  const success = form.get('secret') === TURNSTILE_PASS_SECRET;
+  return new Response(JSON.stringify({ success, hostname: 'example.com', 'error-codes': success ? [] : ['invalid-input-response'] }), {
+    status: 200, headers: { 'content-type': 'application/json' },
+  });
+};
+
 // An env and ctx for driving the Worker in tests. ctx.flush() waits for everything
 // passed to waitUntil.
 export function testEnv(overrides = {}) {
@@ -68,6 +87,7 @@ export function testEnv(overrides = {}) {
     DEMO_ENABLED: '1',
     SESSION_SECRET: 'test-secret-that-is-at-least-32-characters',
     IP_HASH_SALT: 'test-salt',
+    TURNSTILE_SECRET_KEY: TURNSTILE_PASS_SECRET,
     DB: createD1(),
     ...overrides,
   };

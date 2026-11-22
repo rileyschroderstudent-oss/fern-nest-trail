@@ -98,6 +98,11 @@ export const SESSION_TTL_SECONDS = 7200;
 export const MAX_REVISIONS = 2;
 export const SESSION_SECRET_MIN_CHARS = 32;
 
+// ---- Task 9 Turnstile -----------------------------------------------------------
+export const TURNSTILE_VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
+// Not set by the spec. A slow check fails closed (challenge_failed) after this long.
+export const TURNSTILE_TIMEOUT_MS = 10000;
+
 // ---- 4.9 Calling Claude -------------------------------------------------------
 export const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 export const UPSTREAM_TIMEOUT_MS = 90000;

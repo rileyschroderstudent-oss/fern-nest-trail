@@ -11,6 +11,7 @@ import {
 } from './config.js';
 import { callModel } from './anthropic.js';
 import { buildMessage } from './messages.js';
+import { verifyTurnstile } from './turnstile.js';
 import { shapeQuestions, shapePlan } from './postvalidate.js';
 import { validateStartBody, validatePlanBody, validateAnswers } from './validate.js';
 import { issueSession, verifySession, hasUsableSecret } from './session.js';
@@ -40,6 +41,7 @@ const ERROR_MESSAGES = {
   method_not_allowed: 'Method not allowed.',
   invalid_input: 'Invalid input.',
   forbidden_origin: 'Origin not allowed.',
+  challenge_failed: 'Browser check failed.',
   rate_limited: 'Too many requests.',
   invalid_session: 'This trip cannot be continued.',
   session_expired: 'This trip has expired.',
@@ -222,7 +224,15 @@ async function trailStart(request, env, ctx, hash) {
   const now = new Date();
   const valid = validateStartBody(read.body, now);
   if (!valid.ok) return invalidInput(env, request, valid.fields);
-  const { brief } = valid.value;
+  const { brief, turnstileToken } = valid.value;
+
+  // 4.3 step 7: the bot check, before admit, so a failure uses no daily allowance.
+  if (typeof env.TURNSTILE_SECRET_KEY !== 'string' || !env.TURNSTILE_SECRET_KEY) {
+    return errorResponse(env, request, 500, 'internal_error');
+  }
+  if (!(await verifyTurnstile(env, turnstileToken, request.headers.get('CF-Connecting-IP')))) {
+    return errorResponse(env, request, 403, 'challenge_failed');
+  }
 
   const admission = await admit(env, hash, 'start', now);
   if (!admission.ok) return refused(env, request, admission);
