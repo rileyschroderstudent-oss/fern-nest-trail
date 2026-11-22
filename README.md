@@ -8,7 +8,7 @@ Three Claude skills that work together to plan travel. **Showcase site:** https:
 | **WEB NEST** | Nightly Estimate & Stay Tracker | Picks the right area first, then the best-value place to stay that your group can actually check into, with the true total and a book-now-or-wait call. |
 | **WEB TRAIL** | Trip Research, Arrangements, Itinerary & Logistics | Plans a whole trip: research, a short destination-specific interview, a day-by-day itinerary and a costed budget in one doc. It calls WEB FERN for flights and WEB NEST for stays. |
 
-They only ever **search and read**. They never book, hold or pay for anything, and anything that changes state (a price watch, a calendar reminder) needs your yes in chat first. You book yourself, on the seller's site.
+They search and estimate only. The skills tell Claude not to book, hold or pay for anything; you book on the seller's site yourself. Anything that changes state (a price watch, a calendar reminder) needs your yes in chat first.
 
 ## How they work together
 
