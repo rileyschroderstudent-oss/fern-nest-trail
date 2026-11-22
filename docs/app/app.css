@@ -61,6 +61,8 @@ p { margin: 0 0 8px; }
 .screen .panel { margin-bottom: 0; }
 
 .notice { background: #FFFFFF; border: 2px solid #8A2B00; border-left-width: 8px; border-radius: 8px; padding: 14px 18px; margin-bottom: 20px; font-weight: 500; }
+.notice .notice-text { margin: 0; }
+.notice .actions { margin-top: 12px; }
 
 .banner { margin: 0; background: #FFC629; border: 2px solid #121212; border-radius: 8px; padding: 14px 18px; font-weight: 500; }
 

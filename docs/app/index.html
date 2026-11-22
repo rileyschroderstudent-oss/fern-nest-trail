@@ -5,12 +5,48 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TRAIL demo: plan a trip with an estimated budget</title>
 <meta name="description" content="An estimate-only demo that runs WEB TRAIL through the Claude API. No live prices, no booking.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23FFC629'/%3E%3Cpath d='M9 10h14v3h-5.5v11h-3V13H9z' fill='%23121212'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,500..900&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
-<link rel="stylesheet" href="./app.css">
+<script>
+// Loader. APP_VERSION is the app's version: bump it whenever any file in docs/app
+// changes, and set MODULE_VERSION in app.js to the same value (loader.test.mjs
+// fails if they differ). Every module and the stylesheet load with ?v=APP_VERSION
+// through one import map, so a returning visitor never mixes a cached old module
+// with a new one.
+(function () {
+  var APP_VERSION = '2026-11-22.3';
+  var MODULES = ['app.js', 'api.js', 'config.js', 'budget.js'];
+  // app.js compares this with its own copy and reloads once if they differ.
+  window.FNT_APP_VERSION = APP_VERSION;
+
+  // The app never submits a form natively. This also holds if a module fails to load.
+  document.addEventListener('submit', function (event) { event.preventDefault(); }, true);
+
+  var map = { imports: {} };
+  MODULES.forEach(function (file) { map.imports['./' + file] = './' + file + '?v=' + APP_VERSION; });
+  var importMap = document.createElement('script');
+  importMap.type = 'importmap';
+  importMap.textContent = JSON.stringify(map);
+  document.currentScript.after(importMap);
+
+  var css = document.createElement('link');
+  css.rel = 'stylesheet';
+  css.href = './app.css?v=' + APP_VERSION;
+  document.head.appendChild(css);
+
+  function showLoadError() {
+    var box = document.getElementById('load-error');
+    if (box) box.hidden = false;
+    else document.addEventListener('DOMContentLoaded', showLoadError);
+  }
+  window.addEventListener('DOMContentLoaded', function () {
+    import('./app.js').catch(showLoadError);
+  });
+})();
+</script>
 <!-- Cloudflare Turnstile, loaded from Cloudflare and rendered by app.js with the site key in config.js. -->
 <script id="turnstile-api" src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
-<script type="module" src="./app.js"></script>
 </head>
 <body>
 
@@ -32,6 +68,11 @@
     <h2 id="closed-heading" tabindex="-1">The demo is closed</h2>
     <p id="closed-text"></p>
   </div>
+
+  <div id="load-error" class="notice" role="alert" hidden>
+    <p class="notice-text">The page didn't load properly. Reload it to try again.</p>
+  </div>
+  <noscript><div class="notice"><p class="notice-text">This app needs JavaScript. Turn it on and reload the page.</p></div></noscript>
 
   <div id="notice" class="notice" role="alert" tabindex="-1" hidden></div>
 
@@ -149,7 +190,7 @@
         <div id="turnstile" class="turnstile"></div>
 
         <div class="actions">
-          <button id="brief-submit" class="btn btn-primary" type="submit">Get my questions</button>
+          <button id="brief-submit" class="btn btn-primary" type="submit" disabled>Get my questions</button>
         </div>
       </fieldset>
       <p id="brief-working" class="working" aria-live="polite"></p>

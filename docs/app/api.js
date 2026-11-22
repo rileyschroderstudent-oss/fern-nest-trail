@@ -36,6 +36,26 @@ export function errorText(code) {
   return ERROR_TEXT[code] || ERROR_TEXT.internal_error;
 }
 
+// Errors that show a Retry button that resends the same request (SPEC.md Task 10).
+export const RETRYABLE = new Set(['upstream_busy', 'upstream_error', 'bad_model_output']);
+
+// The longest wait a per-minute burst can ask for. A daily limit asks for longer,
+// except in the last minute before 00:00 UTC, when a countdown is the right display.
+const BURST_MAX_SECONDS = 60;
+
+// Fixed text for rate_limited: a countdown for a burst, the local reopening time for
+// a daily limit. `secondsLeft` is how long is left now.
+export function rateLimitText(secondsLeft, retryAfterSeconds, formatTime) {
+  if (!Number.isFinite(retryAfterSeconds) || retryAfterSeconds <= 0) return ERROR_TEXT.rate_limited;
+  if (retryAfterSeconds <= BURST_MAX_SECONDS) {
+    return secondsLeft > 0 ? `Slow down. Try again in ${secondsLeft} s.` : 'You can try again now.';
+  }
+  const when = formatTime(new Date(Date.now() + secondsLeft * 1000));
+  return `You've used today's trips. Back at ${when}, your local time.`;
+}
+
+export const isBurst = (retryAfterSeconds) => Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0 && retryAfterSeconds <= BURST_MAX_SECONDS;
+
 // Returns { ok: true, data } or { ok: false, code, error }, where error is the
 // server's error envelope when there was one. Never throws.
 async function request(method, path, body) {

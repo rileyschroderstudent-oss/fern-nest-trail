@@ -1,10 +1,25 @@
 // Screens, state and rendering for the TRAIL demo (SPEC.md Task 3).
 // Every piece of model-written text goes on the page with textContent only.
-import { getStatus, startTrip, planTrip, errorText, DECLINE_TEXT } from './api.js';
+import {
+  getStatus,
+  startTrip,
+  planTrip,
+  errorText,
+  DECLINE_TEXT,
+  RETRYABLE,
+  rateLimitText,
+  isBurst,
+} from './api.js';
 import { computeBudget, fitVerdict } from './budget.js';
 import { CONFIG } from './config.js';
 
 const STORAGE_KEY = 'fnt-trail-state-v1';
+
+// Must equal APP_VERSION in index.html (loader.test.mjs checks). A stale cached
+// index.html can be served new modules, because GitHub Pages ignores ?v= and serves
+// the current file. When the page and the modules disagree, the page reloads once
+// to ./?v=<MODULE_VERSION>, a URL with no cached copy, so a fresh index.html arrives.
+const MODULE_VERSION = '2026-11-22.3';
 const $ = (id) => document.getElementById(id);
 
 // ---- Small DOM helpers ----------------------------------------------------------
@@ -117,31 +132,64 @@ function showScreen(name, { focus = true } = {}) {
   window.scrollTo(0, 0);
 }
 
-function showNotice(text) {
+// The notice area holds one message at a time: fixed text, an optional Retry button,
+// and for a burst limit a countdown that updates once a second.
+let noticeTimer = null;
+
+function showNotice(text, { retry = null, focus = true } = {}) {
+  clearNotice();
   const notice = $('notice');
-  notice.textContent = text;
+  const message = el('p', { class: 'notice-text', text });
+  notice.append(message);
+  if (retry) {
+    const button = el('button', { class: 'btn btn-secondary', type: 'button', text: 'Retry' });
+    button.addEventListener('click', () => {
+      if (busy) return;
+      clearNotice();
+      retry();
+    });
+    notice.append(el('div', { class: 'actions' }, [button]));
+  }
   notice.hidden = false;
-  notice.focus();
+  if (focus) notice.focus();
+  return message;
 }
 
 function clearNotice() {
+  if (noticeTimer !== null) clearInterval(noticeTimer);
+  noticeTimer = null;
   $('notice').hidden = true;
-  $('notice').textContent = '';
+  $('notice').replaceChildren();
 }
 
-const CLOSED_TEXT = {
-  paused: 'The demo is paused.',
-  daily_cap: 'The demo has hit its budget for today.',
-  monthly_cap: 'The demo has hit its budget for this month.',
-};
+function showRateLimited(retryAfterSeconds) {
+  const fmt = (d) => new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(d);
+  const endsAt = Date.now() + (Number(retryAfterSeconds) || 0) * 1000;
+  const left = () => Math.max(0, Math.ceil((endsAt - Date.now()) / 1000));
+  const message = showNotice(rateLimitText(left(), retryAfterSeconds, fmt));
+  if (!isBurst(retryAfterSeconds)) return;
+  noticeTimer = setInterval(() => {
+    message.textContent = rateLimitText(left(), retryAfterSeconds, fmt);
+    if (left() === 0) {
+      clearInterval(noticeTimer);
+      noticeTimer = null;
+    }
+  }, 1000);
+}
 
-function showClosed(reason, reopensAt) {
-  const base = CLOSED_TEXT[reason] || 'The demo is closed for now.';
+// The closed panel replaces the Brief and Questions forms. A plan already on screen
+// stays readable.
+function showClosed(reason, reopensAt, { focus = false } = {}) {
   const when = reopensAt ? localTime(reopensAt) : '';
-  $('closed-text').textContent = when ? `${base} It reopens at ${when}, your local time.` : base;
+  let text;
+  if (reason === 'paused') text = 'The demo is paused. Try again later.';
+  else if (when) text = `The demo has hit its budget and reopens at ${when}, your local time.`;
+  else text = 'The demo has hit its budget and is closed for now.';
+  $('closed-text').textContent = text;
   $('closed').hidden = false;
-  $('brief-fields').disabled = true;
-  $('questions-submit').disabled = true;
+  $('brief-form').hidden = true;
+  $('questions-form').hidden = true;
+  if (focus) $('closed-heading').focus();
 }
 
 // Shows "Working... N s" in a polite live region while a request runs.
@@ -283,11 +331,34 @@ let turnstileToken = '';
 
 const CHECK_NOT_READY = "The browser check hasn't finished yet. Wait a moment and try again. If no check appears, reload the page.";
 
+// How long a Retry on /start waits for the widget to produce a fresh token.
+const TOKEN_WAIT_MS = 30000;
+let tokenWaiters = [];
+
+function tokenArrived(token) {
+  turnstileToken = token;
+  const waiters = tokenWaiters;
+  tokenWaiters = [];
+  for (const resolve of waiters) resolve(token);
+}
+
+// Resolves with a token, or with '' if none arrives in time.
+function waitForToken() {
+  if (turnstileToken) return Promise.resolve(turnstileToken);
+  return new Promise((resolve) => {
+    tokenWaiters.push(resolve);
+    setTimeout(() => {
+      tokenWaiters = tokenWaiters.filter((r) => r !== resolve);
+      resolve('');
+    }, TOKEN_WAIT_MS);
+  });
+}
+
 function renderTurnstile() {
   if (turnstileWidget !== null || !window.turnstile) return;
   turnstileWidget = window.turnstile.render('#turnstile', {
     sitekey: CONFIG.turnstileSiteKey,
-    callback: (token) => { turnstileToken = token; },
+    callback: tokenArrived,
     'expired-callback': () => { turnstileToken = ''; },
     'error-callback': () => { turnstileToken = ''; },
   });
@@ -312,13 +383,26 @@ async function onBriefSubmit(event) {
   if (!checkForm()) return;
 
   if (!turnstileToken) return showNotice(CHECK_NOT_READY);
+  return sendStart(briefFromForm(), turnstileToken);
+}
 
+// Sends /start. A Retry resends the same brief with a fresh token, waiting for the
+// widget to produce one first.
+async function sendStart(brief, token) {
+  if (busy) return undefined;
   const done = startWorking($('brief-submit'), $('brief-working'));
-  const result = await startTrip({ brief: briefFromForm(), turnstileToken });
+  let tokenToSend = token;
+  if (!tokenToSend) tokenToSend = await waitForToken();
+  if (!tokenToSend) {
+    done();
+    return showNotice(CHECK_NOT_READY);
+  }
+  turnstileToken = ''; // a token works once
+  const result = await startTrip({ brief, turnstileToken: tokenToSend });
   done();
   resetTurnstile(); // after every /start response, success or failure
 
-  if (!result.ok) return handleError(result, 'brief');
+  if (!result.ok) return handleError(result, 'brief', () => sendStart(brief, ''));
   const data = result.data;
   if (data.type === 'declined') return showNotice(DECLINE_TEXT[data.reason] || DECLINE_TEXT.other);
   if (data.type !== 'questions' || !Array.isArray(data.questions)) return showNotice(errorText('bad_model_output'));
@@ -372,12 +456,18 @@ async function onQuestionsSubmit(event) {
   clearNotice();
 
   const answers = state.questions.questions.map((q) => ({ questionId: q.id, optionId: state.answers[q.id] }));
+  return sendPlan({ session: state.questions.session, answers });
+}
+
+// Sends /plan. A Retry resends exactly the same request.
+async function sendPlan(request) {
+  if (busy) return undefined;
   const done = startWorking($('questions-submit'), $('questions-working'));
-  const result = await planTrip({ session: state.questions.session, answers });
+  const result = await planTrip(request);
   done();
   $('questions-submit').disabled = !allAnswered() || isClosed();
 
-  if (!result.ok) return handleError(result, 'questions');
+  if (!result.ok) return handleError(result, 'questions', () => sendPlan(request));
   const data = result.data;
   if (data.type === 'declined') {
     showScreen('brief', { focus: false });
@@ -562,18 +652,44 @@ function isClosed() {
   return statusInfo !== null && statusInfo.open === false;
 }
 
-function handleError(result, screen) {
-  if (result.code === 'demo_closed') {
-    showClosed(statusInfo?.reason, result.error?.reopensAt);
-    return showNotice(errorText('demo_closed'));
+// Drops the trip in progress (questions, answers, plan) but keeps the form values.
+function clearTrip() {
+  state.questions = null;
+  state.answers = {};
+  state.plan = null;
+  save();
+}
+
+// Shows a failed request (SPEC.md 4.4 and Task 10). Only fixed text is shown, the
+// form values are always kept, and nothing retries by itself: a Retry is a paid call.
+// `retry` resends the same request.
+function handleError(result, screen, retry) {
+  const { code, error } = result;
+  switch (code) {
+    case 'demo_closed':
+      clearNotice();
+      showClosed(null, error?.reopensAt ?? null, { focus: true });
+      loadStatus({ quiet: true }); // learns whether it is paused or over budget
+      return undefined;
+    case 'rate_limited':
+      return showRateLimited(error?.retryAfterSeconds);
+    case 'invalid_session':
+    case 'session_expired':
+      clearTrip();
+      showScreen('brief', { focus: false });
+      return showNotice(errorText(code));
+    case 'invalid_input':
+      if (screen === 'brief') {
+        const first = showServerFieldErrors(result.error);
+        showNotice(errorText('invalid_input'), { focus: !first });
+        if (first) input(first).focus();
+        return undefined;
+      }
+      return showNotice(errorText('internal_error'));
+    default:
+      if (RETRYABLE.has(code) && retry) return showNotice(errorText(code), { retry });
+      return showNotice(errorText(code));
   }
-  if (result.code === 'invalid_input' && screen === 'brief') {
-    const first = showServerFieldErrors(result.error);
-    showNotice(errorText('invalid_input'));
-    if (first) input(first).focus();
-    return undefined;
-  }
-  return showNotice(errorText(result.code));
 }
 
 // ---- Start-up ---------------------------------------------------------------------
@@ -589,10 +705,10 @@ function resetToNewTrip() {
   showScreen('brief');
 }
 
-async function loadStatus() {
+async function loadStatus({ quiet = false } = {}) {
   const result = await getStatus();
   if (!result.ok) {
-    showNotice(errorText(result.code));
+    if (!quiet) showNotice(errorText(result.code), { focus: false });
     return;
   }
   statusInfo = result.data;
@@ -602,7 +718,25 @@ async function loadStatus() {
   if (state.screen === 'plan') renderPlan();
 }
 
+// True when index.html and the modules are the same version. Otherwise reloads once,
+// or, if this load already came from that reload, shows the load-error message so
+// mixed versions never run. The ?v= in the page URL is the loop guard: it needs no
+// storage, so it also works when sessionStorage is blocked.
+function versionMatches() {
+  if (window.FNT_APP_VERSION === MODULE_VERSION) return true;
+  const url = new URL(window.location.href);
+  if (url.searchParams.get('v') !== MODULE_VERSION) {
+    url.searchParams.set('v', MODULE_VERSION);
+    window.location.replace(url.toString());
+  } else {
+    $('load-error').hidden = false;
+  }
+  return false;
+}
+
 function init() {
+  if (!versionMatches()) return;
+
   const thisYear = new Date().getUTCFullYear();
   const year = $('f-year');
   year.min = String(thisYear);
@@ -636,6 +770,10 @@ function init() {
 
   $('plan-new').addEventListener('click', resetToNewTrip);
   $('plan-print').addEventListener('click', () => window.print());
+
+  // The button ships disabled in index.html, so a page whose script failed to load
+  // cannot be submitted. It is usable from here on.
+  $('brief-submit').disabled = false;
 
   showScreen(state.screen, { focus: false });
   setupTurnstile();
