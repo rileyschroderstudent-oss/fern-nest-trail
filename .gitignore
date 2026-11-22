@@ -4,3 +4,4 @@ node_modules/
 SPEC.md
 PROMPT.md
 RUNLOG.md
+worker/scripts/out/

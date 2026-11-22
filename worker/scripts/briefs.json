@@ -1,0 +1,83 @@
+{
+  "about": "The six bake-off briefs from SPEC.md Task 13. Fields the spec does not give use the app form's defaults: origin Brisbane, goal best_value, pace balanced, month 0 (flexible), empty interests and notes. Years are the next occurrence of each month after Nov 2026. A budget of 0 means not sure.",
+  "briefs": [
+    {
+      "destination": "Vietnam",
+      "origin": "Brisbane",
+      "travellers": 4,
+      "nights": 12,
+      "month": 7,
+      "year": 2027,
+      "budgetPerPersonAud": 3200,
+      "goal": "best_value",
+      "pace": "balanced",
+      "interests": "",
+      "notes": ""
+    },
+    {
+      "destination": "Japan",
+      "origin": "Brisbane",
+      "travellers": 4,
+      "nights": 14,
+      "month": 4,
+      "year": 2027,
+      "budgetPerPersonAud": 5000,
+      "goal": "best_value",
+      "pace": "balanced",
+      "interests": "",
+      "notes": ""
+    },
+    {
+      "destination": "Tasmania road trip",
+      "origin": "Brisbane",
+      "travellers": 2,
+      "nights": 7,
+      "month": 1,
+      "year": 2027,
+      "budgetPerPersonAud": 2500,
+      "goal": "best_value",
+      "pace": "relaxed",
+      "interests": "",
+      "notes": ""
+    },
+    {
+      "destination": "New Zealand South Island",
+      "origin": "Brisbane",
+      "travellers": 4,
+      "nights": 10,
+      "month": 0,
+      "year": 2027,
+      "budgetPerPersonAud": 0,
+      "goal": "most_comfortable",
+      "pace": "balanced",
+      "interests": "",
+      "notes": ""
+    },
+    {
+      "destination": "Bali",
+      "origin": "Brisbane",
+      "travellers": 2,
+      "nights": 6,
+      "month": 0,
+      "year": 2027,
+      "budgetPerPersonAud": 1200,
+      "goal": "cheapest",
+      "pace": "balanced",
+      "interests": "",
+      "notes": ""
+    },
+    {
+      "destination": "Rome, Florence and Paris",
+      "origin": "Brisbane",
+      "travellers": 2,
+      "nights": 16,
+      "month": 9,
+      "year": 2027,
+      "budgetPerPersonAud": 7000,
+      "goal": "best_value",
+      "pace": "balanced",
+      "interests": "",
+      "notes": ""
+    }
+  ]
+}
