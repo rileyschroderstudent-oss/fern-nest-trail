@@ -42,6 +42,11 @@ h1:focus, h2:focus, .notice:focus { outline: none; box-shadow: none; }
 
 main { padding-top: 32px; padding-bottom: 64px; }
 
+/* "How this works" panel (SPEC.md 6.4) */
+.how { background: #FFFFFF; border: 1.5px solid #121212; border-radius: 8px; padding: 10px 16px; margin-bottom: 20px; }
+.how summary { cursor: pointer; font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 15px; padding: 4px 0; }
+.how .list { margin-top: 10px; font-size: 15px; }
+
 /* Type */
 h1 { margin: 0 0 12px; font-family: 'Archivo', sans-serif; font-stretch: 85%; font-weight: 900; font-size: 44px; line-height: 1; text-transform: uppercase; overflow-wrap: anywhere; }
 h2 { margin: 0 0 12px; font-family: 'Archivo', sans-serif; font-stretch: 85%; font-weight: 800; font-size: 24px; line-height: 1.1; text-transform: uppercase; }

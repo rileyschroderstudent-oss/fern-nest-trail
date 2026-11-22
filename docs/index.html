@@ -32,6 +32,7 @@ a{color:#121212}a:hover{color:#5C4A00}
 <a href="#how" style="color: #FFFFFF; text-decoration: none; padding: 10px 12px">How it works</a>
 <a href="#example" style="color: #FFFFFF; text-decoration: none; padding: 10px 12px">Example</a>
 <a href="#start" style="color: #FFFFFF; text-decoration: none; padding: 10px 12px">Get started</a>
+<a href="app/" style="color: #FFFFFF; text-decoration: none; padding: 10px 12px">Try the demo</a>
 <a href="https://github.com/rileyschroderstudent-oss/fern-nest-trail" style="color: #121212; background: #FFC629; text-decoration: none; padding: 10px 14px; border-radius: 4px; font-weight: 600">GitHub →</a>
 </nav>
 </div>
@@ -88,7 +89,7 @@ a{color:#121212}a:hover{color:#5C4A00}
 
 <p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #55554F">Flight Estimate &amp; Route Navigator</p>
 <p style="margin: 0; color: #2E2E2B">Finds the cheapest sensible flights, or best value if you ask. Prices the true cost with bags and fees, and gives an honest book-now-or-wait call.</p>
-<ul style="margin: 0; padding-left: 20px; color: #2E2E2B; display: flex; flex-direction: column; gap: 4px; font-size: 16px"><li>Skips 2am landings and risky self-transfers unless you want cheapest at any cost</li><li>Always shows the cheapest option next to the pick</li><li>Rates fares against the route's usual price</li></ul>
+<ul style="margin: 0; padding-left: 20px; color: #2E2E2B; display: flex; flex-direction: column; gap: 4px; font-size: 16px"><li>Skips 2am landings and risky self-transfers unless you want cheapest at any cost</li><li>Always shows the cheapest option next to the pick</li><li>Rates fares against the route's usual price when a connected tool supplies one</li></ul>
 </div>
 <div style="border-top: 2px dashed #121212; padding: 16px 28px; display: flex; flex-wrap: wrap; gap: 6px 20px; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
 <span>Seat · flights</span><span>Class · read-only</span><span>Hands to · TRAIL</span>
@@ -122,7 +123,7 @@ a{color:#121212}a:hover{color:#5C4A00}
 
 <p style="margin: 0; font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: #55554F">Trip Research, Arrangements, Itinerary &amp; Logistics</p>
 <p style="margin: 0; color: #2E2E2B">Researches first, asks a short destination-specific interview, then builds a day-by-day itinerary and a costed budget in one doc.</p>
-<ul style="margin: 0; padding-left: 20px; color: #2E2E2B; display: flex; flex-direction: column; gap: 4px; font-size: 16px"><li>Calls FERN and NEST for real fares and stays</li><li>Works the budget out in code, not in its head</li><li>Blunt when it doesn't fit, with the levers to fix it</li></ul>
+<ul style="margin: 0; padding-left: 20px; color: #2E2E2B; display: flex; flex-direction: column; gap: 4px; font-size: 16px"><li>In the Claude app, calls FERN and NEST, which search your connected travel tools</li><li>Works the budget out in code, not in its head</li><li>Blunt when it doesn't fit, with the levers to fix it</li></ul>
 </div>
 <div style="border-top: 2px dashed #121212; padding: 16px 28px; display: flex; flex-wrap: wrap; gap: 6px 20px; font-family: 'IBM Plex Mono', monospace; font-size: 13px">
 <span>Seat · whole trip</span><span>Class · read-only</span><span>Calls · FERN + NEST</span>
@@ -224,6 +225,18 @@ a{color:#121212}a:hover{color:#5C4A00}
 </div>
 </section>
 
+<section id="demo" style="max-width: 1180px; margin: 0 auto; padding: 0 32px 88px">
+<article style="background: #FFFFFF; border: 1.5px solid #121212; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column">
+<div style="background: #121212; padding: 24px 28px">
+<h2 style="margin: 0; font-family: 'Archivo', sans-serif; font-stretch: 85%; font-weight: 900; font-size: 40px; line-height: 1; text-transform: uppercase; color: #FFC629">Try TRAIL in your browser</h2>
+</div>
+<div style="padding: 24px 28px; display: flex; flex-wrap: wrap; gap: 20px; align-items: center; justify-content: space-between">
+<p style="margin: 0; flex: 1 1 420px; min-width: 0; color: #2E2E2B">An estimate-only demo that runs WEB TRAIL through the Claude API. No live prices, no booking. Three trips a day per visitor, and it closes when it hits its monthly budget.</p>
+<a href="app/" style="display: inline-flex; align-items: center; min-height: 52px; padding: 0 26px; border-radius: 6px; background: #FFC629; color: #121212; border: 2px solid #121212; font-family: 'Archivo', sans-serif; font-weight: 800; font-size: 17px; letter-spacing: 0.04em; text-transform: uppercase; text-decoration: none">Open the demo</a>
+</div>
+</article>
+</section>
+
 <section style="background: #FFC629">
 <div style="max-width: 1180px; margin: 0 auto; padding: 72px 32px; display: flex; flex-direction: column; gap: 32px">
 <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: end; justify-content: space-between">
@@ -233,7 +246,7 @@ a{color:#121212}a:hover{color:#5C4A00}
 <div style="display: flex; flex-wrap: wrap; gap: 16px">
 <div style="flex: 1 1 240px; min-width: 0; background: #121212; color: #FFFFFF; border-radius: 8px; padding: 22px; display: flex; flex-direction: column; gap: 8px">
 <h3 style="margin: 0; font-family: 'Archivo', sans-serif; font-weight: 800; font-size: 20px; color: #FFC629">Search and read only</h3>
-<p style="margin: 0; font-size: 15px; color: #E2E2DC">Every allowed tool is listed. Booking, payment and account tools are never called.</p>
+<p style="margin: 0; font-size: 15px; color: #E2E2DC">Every allowed tool is listed. The skills instruct Claude never to call booking, payment or account tools. That is an instruction to the model, not an enforced block.</p>
 </div>
 <div style="flex: 1 1 240px; min-width: 0; background: #121212; color: #FFFFFF; border-radius: 8px; padding: 22px; display: flex; flex-direction: column; gap: 8px">
 <h3 style="margin: 0; font-family: 'Archivo', sans-serif; font-weight: 800; font-size: 20px; color: #FFC629">Your yes, item by item</h3>
@@ -241,7 +254,7 @@ a{color:#121212}a:hover{color:#5C4A00}
 </div>
 <div style="flex: 1 1 240px; min-width: 0; background: #121212; color: #FFFFFF; border-radius: 8px; padding: 22px; display: flex; flex-direction: column; gap: 8px">
 <h3 style="margin: 0; font-family: 'Archivo', sans-serif; font-weight: 800; font-size: 20px; color: #FFC629">Tool output is data</h3>
-<p style="margin: 0; font-size: 15px; color: #E2E2DC">Instructions hidden in search results, listings or reviews are ignored, not followed.</p>
+<p style="margin: 0; font-size: 15px; color: #E2E2DC">The skills tell Claude to treat instructions inside tool results as data.</p>
 </div>
 <div style="flex: 1 1 240px; min-width: 0; background: #121212; color: #FFFFFF; border-radius: 8px; padding: 22px; display: flex; flex-direction: column; gap: 8px">
 <h3 style="margin: 0; font-family: 'Archivo', sans-serif; font-weight: 800; font-size: 20px; color: #FFC629">Your sign-ins stay yours</h3>
@@ -254,7 +267,7 @@ a{color:#121212}a:hover{color:#5C4A00}
 <section id="start" style="max-width: 1180px; margin: 0 auto; padding: 88px 32px; display: flex; flex-wrap: wrap; gap: 48px">
 <div style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
 <h2 style="margin: 0; font-family: 'Archivo', sans-serif; font-stretch: 85%; font-weight: 900; font-size: 48px; line-height: 1; text-transform: uppercase">Get started</h2>
-<p style="margin: 0; color: #3B3B38">Built and tested from Australia: prices in AUD and an Australian booking market. Each skill has a Your details section you can change.</p>
+<p style="margin: 0; color: #3B3B38">Built in Australia and used on my own trip planning: prices in AUD and an Australian booking market. Each skill has a Your details section you can change.</p>
 </div>
 <ol style="flex: 999 1 560px; min-width: 0; margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; border-top: 1.5px solid #121212">
 <li style="display: flex; gap: 20px; padding: 18px 0; border-bottom: 1.5px solid #121212"><span style="font-family: 'IBM Plex Mono', monospace; font-weight: 600; flex: 0 0 48px">01</span><span><strong>Download the skills from GitHub.</strong> Three folders: web-fern, web-nest and web-trail.</span></li>

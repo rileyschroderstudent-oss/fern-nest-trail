@@ -20,7 +20,7 @@ const STORAGE_KEY = 'fnt-trail-state-v1';
 // index.html can be served new modules, because GitHub Pages ignores ?v= and serves
 // the current file. When the page and the modules disagree, the page reloads once
 // to ./?v=<MODULE_VERSION>, a URL with no cached copy, so a fresh index.html arrives.
-const MODULE_VERSION = '2026-11-22.4';
+const MODULE_VERSION = '2026-11-22.5';
 const $ = (id) => document.getElementById(id);
 
 // ---- Small DOM helpers ----------------------------------------------------------

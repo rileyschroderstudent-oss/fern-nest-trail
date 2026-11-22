@@ -29,6 +29,57 @@ They only ever **search and read**. They never book, hold or pay for anything, a
 - **All three share a "dates not on sale yet" rule** (match the season, never let off-peak prices stand in for a peak window, add a 10–15% buffer for dates a year or more out, label it RE-QUOTE), so a trip budget stays consistent.
 - WEB FERN and WEB NEST also work on their own: "FERN: how much to fly to Tokyo in April?" or "NEST: somewhere near Namba for 4 people".
 
+## Try WEB TRAIL in a browser (estimate-only demo)
+
+**[Open the demo]([NEEDS: live app URL])** · student project · built with AI assistance
+
+A web app that runs WEB TRAIL through the Claude API. You fill in a trip brief,
+answer three or four questions, and get a day-by-day plan with an itemised cost estimate.
+
+**What it is not.** It does not search for flights or hotels and it has no live prices.
+Every figure is an estimate from an AI model's general knowledge, labelled as one.
+It cannot book anything. WEB FERN and WEB NEST are not in the app yet.
+
+### How it works
+- A static page on GitHub Pages. A Cloudflare Worker holds the API key and is the
+  only thing that calls Claude.
+- The model returns line items as structured JSON. Totals, contingency and the
+  fits-the-budget verdict come from a function I wrote by hand
+  (`docs/app/budget.js`, tests in `docs/app/budget.test.mjs`).
+- The Worker stores no trip content. It keeps counters and a log of token counts and cost.
+- Design notes: [ARCHITECTURE.md](ARCHITECTURE.md)
+
+### Cost controls
+| Layer | Limit |
+|---|---|
+| Per visitor | 3 trips a day |
+| Worker, daily | 120 model calls or US$0.35 |
+| Worker, monthly | 1,500 model calls or US$4.50 |
+| Claude Console | US$6 a month on a dedicated workspace, prepaid, auto-reload off |
+
+Measured cost per run: [NEEDS: average from usage-report.sql, number of runs, date]
+
+### Known limits
+- Estimates can be wrong. Price levels come from the model's training data.
+- The app does not give entry or visa rules. It lists what to check.
+- Built for trips from Australia, in AUD. Up to 8 travellers and 21 nights.
+- The demo closes when it reaches its daily or monthly budget.
+
+### What was tested
+[NEEDS: bake-off scores for six briefs, and the result of the eight guardrail briefs, with date]
+
+### Run it locally
+    cd worker && npm install && cp .dev.vars.example .dev.vars
+    npm run migrate:local && npm run dev
+    python3 -m http.server 8788 --directory docs     # in a second terminal
+    # open http://localhost:8788/app/  (mock mode, no API key needed)
+
+### How it was made
+I set the constraints: a Worker in front of the API, estimate-only, one skill first,
+hard cost caps. The detailed spec was drafted with Claude and reviewed by me.
+Claude wrote most of the code from that spec. I wrote `budget.js`, ran the model
+comparison and the guardrail tests, and deployed it.
+
 ## Install
 
 Each skill folder's name matches the skill's `name` (`web-fern`, `web-nest`, `web-trail`). Keep it that way, or the upload can fail.
@@ -64,7 +115,7 @@ The skills use whichever of these are connected and skip the rest (each failed o
 - **Optional:** Google Calendar and Notion (read-only) for break dates; Booking.com attractions search for activity prices.
 - Plus whatever WEB FERN and WEB NEST use.
 
-The skills were built and tested from Australia, so prices are reported in AUD, the price thresholds are in A$, and the Booking.com and Trivago settings use an Australian market. Change the Connector notes in WEB FERN and WEB NEST if you're elsewhere. Entry rules follow the passport you set in Your details.
+The skills were built in Australia and used on my own trip planning, so prices are reported in AUD, the price thresholds are in A$, and the Booking.com and Trivago settings use an Australian market. Change the Connector notes in WEB FERN and WEB NEST if you're elsewhere. Entry rules follow the passport you set in Your details.
 
 ## Example: a WEB TRAIL trip
 
@@ -90,10 +141,10 @@ The skills were built and tested from Australia, so prices are reported in AUD, 
 
 ## Safety at a glance
 
-- Search and read-only tools only, listed per connector in each skill. Booking, payment, account and traveller-profile tools are never called.
+- Search and read-only tools only, listed per connector in each skill. The skills instruct Claude never to call booking, payment or account tools. That is an instruction to the model, not an enforced block.
 - Price watches and calendar reminders only after you say yes to that exact item.
 - Browsing only in Claude's built-in browser, read-only, never your own Chrome with your sign-ins.
-- Instructions inside tool results, listings or reviews are treated as data, not followed.
+- The skills tell Claude to treat instructions inside tool results as data.
 
 ## Licence
 

@@ -15,7 +15,7 @@
 // through one import map, so a returning visitor never mixes a cached old module
 // with a new one.
 (function () {
-  var APP_VERSION = '2026-11-22.4';
+  var APP_VERSION = '2026-11-22.5';
   var MODULES = ['app.js', 'api.js', 'config.js', 'budget.js'];
   // app.js compares this with its own copy and reloads once if they differ.
   window.FNT_APP_VERSION = APP_VERSION;
@@ -63,6 +63,19 @@
 <p class="ai-line"><span class="wrap">You're using an AI system (Claude), not talking to a person. Every price here is an estimate.</span></p>
 
 <main class="wrap">
+
+  <details class="how">
+    <summary>How this works</summary>
+    <ul class="list">
+      <li>You're using an AI system (Claude, made by Anthropic), not talking to a person.</li>
+      <li>Every price is an estimate from the model's general knowledge. Nothing is searched or checked live.</li>
+      <li>The totals are calculated in code, not by the AI.</li>
+      <li>This demo is for adults (18+). Don't enter personal details.</li>
+      <li>This site stores no trip details. It keeps usage counters and a log of token counts. Your text is sent to Anthropic to generate the plan and is handled under Anthropic's own data policies.</li>
+      <li>Limits: 3 trips a day per visitor. The demo closes when it reaches its budget.</li>
+      <li>Source code and design notes: <a href="https://github.com/rileyschroderstudent-oss/fern-nest-trail" rel="noopener">the repo on GitHub</a> and <a href="https://github.com/rileyschroderstudent-oss/fern-nest-trail/blob/main/ARCHITECTURE.md" rel="noopener">ARCHITECTURE.md</a>.</li>
+    </ul>
+  </details>
 
   <div id="closed" class="panel panel-dark" hidden>
     <h2 id="closed-heading" tabindex="-1">The demo is closed</h2>
