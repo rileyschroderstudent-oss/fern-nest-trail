@@ -15,7 +15,7 @@
 // through one import map, so a returning visitor never mixes a cached old module
 // with a new one.
 (function () {
-  var APP_VERSION = '2026-11-22.3';
+  var APP_VERSION = '2026-11-22.4';
   var MODULES = ['app.js', 'api.js', 'config.js', 'budget.js'];
   // app.js compares this with its own copy and reloads once if they differ.
   window.FNT_APP_VERSION = APP_VERSION;
@@ -274,6 +274,21 @@
       <h2>Warnings</h2>
       <ul id="plan-warnings" class="list"></ul>
     </div>
+
+    <form id="revise-form" class="card" novalidate hidden>
+      <h2 id="revise-heading">Change this plan</h2>
+      <div class="field">
+        <label for="f-revise">What should change?</label>
+        <textarea id="f-revise" rows="3" minlength="3" maxlength="300" aria-describedby="h-revise c-revise e-revise"></textarea>
+        <p class="hint" id="h-revise"></p>
+        <p class="counter" id="c-revise" aria-live="polite">0 / 300</p>
+        <p class="field-error" id="e-revise"></p>
+      </div>
+      <div class="actions">
+        <button id="revise-submit" class="btn btn-primary" type="submit">Revise the plan</button>
+      </div>
+      <p id="revise-working" class="working" aria-live="polite"></p>
+    </form>
 
     <footer class="plan-footer">
       <p id="plan-meta"></p>

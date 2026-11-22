@@ -4,6 +4,7 @@ import {
   getStatus,
   startTrip,
   planTrip,
+  reviseTrip,
   errorText,
   DECLINE_TEXT,
   RETRYABLE,
@@ -19,7 +20,7 @@ const STORAGE_KEY = 'fnt-trail-state-v1';
 // index.html can be served new modules, because GitHub Pages ignores ?v= and serves
 // the current file. When the page and the modules disagree, the page reloads once
 // to ./?v=<MODULE_VERSION>, a URL with no cached copy, so a fresh index.html arrives.
-const MODULE_VERSION = '2026-11-22.3';
+const MODULE_VERSION = '2026-11-22.4';
 const $ = (id) => document.getElementById(id);
 
 // ---- Small DOM helpers ----------------------------------------------------------
@@ -81,7 +82,8 @@ const state = {
   form: { ...DEFAULT_FORM },
   questions: null, // the /start response
   answers: {}, // questionId -> optionId
-  plan: null, // the /plan response, kept exactly as received
+  plan: null, // the /plan or /revise response, kept exactly as received
+  reviseText: '', // the change request being typed, kept through errors
   model: null,
   mock: false,
 };
@@ -91,8 +93,8 @@ let statusInfo = null;
 
 function save() {
   try {
-    const { screen, form, questions, answers, plan } = state;
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ screen, form, questions, answers, plan }));
+    const { screen, form, questions, answers, plan, reviseText } = state;
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ screen, form, questions, answers, plan, reviseText }));
   } catch {
     // Storage can be full or blocked; the page still works without it.
   }
@@ -106,6 +108,7 @@ function restore() {
     if (saved.questions && saved.questions.type === 'questions') state.questions = saved.questions;
     if (saved.answers && typeof saved.answers === 'object') state.answers = saved.answers;
     if (saved.plan && saved.plan.type === 'plan') state.plan = saved.plan;
+    if (typeof saved.reviseText === 'string') state.reviseText = saved.reviseText;
     if (saved.screen === 'plan' && state.plan) state.screen = 'plan';
     else if (saved.screen === 'questions' && state.questions) state.screen = 'questions';
     else state.screen = 'brief';
@@ -189,6 +192,7 @@ function showClosed(reason, reopensAt, { focus = false } = {}) {
   $('closed').hidden = false;
   $('brief-form').hidden = true;
   $('questions-form').hidden = true;
+  $('revise-form').hidden = true;
   if (focus) $('closed-heading').focus();
 }
 
@@ -596,6 +600,77 @@ function renderBudget(data, totals) {
   $('plan-budget').replaceChildren(...parts);
 }
 
+// ---- Revise (SPEC.md Task 11) -----------------------------------------------------
+
+const REVISE_MAX = 300;
+
+function renderRevise() {
+  const left = Number(state.plan?.revisionsLeft) || 0;
+  const form = $('revise-form');
+  form.hidden = left <= 0 || isClosed();
+  if (form.hidden) return;
+  $('h-revise').textContent = left === 1 ? '1 revision left.' : `${left} revisions left.`;
+  $('f-revise').value = state.reviseText || '';
+  updateReviseCounter();
+}
+
+function updateReviseCounter() {
+  $('c-revise').textContent = `${Array.from($('f-revise').value).length} / ${REVISE_MAX}`;
+}
+
+function setReviseError(text) {
+  $('e-revise').textContent = text;
+  $('f-revise').setAttribute('aria-invalid', text ? 'true' : 'false');
+}
+
+async function onReviseSubmit(event) {
+  event.preventDefault();
+  if (busy) return;
+  clearNotice();
+  setReviseError('');
+  const text = $('f-revise').value;
+  state.reviseText = text;
+  save();
+  const length = Array.from(text.trim()).length;
+  if (length < 3 || length > REVISE_MAX) {
+    setReviseError(`Describe the change in 3 to ${REVISE_MAX} characters.`);
+    $('f-revise').focus();
+    return;
+  }
+  // The plan goes back exactly as it was received; computed totals live elsewhere.
+  await sendRevise({ session: state.plan.session, plan: state.plan.plan, request: text });
+}
+
+// Sends /revise. A Retry resends exactly the same request.
+async function sendRevise(request) {
+  if (busy) return undefined;
+  const done = startWorking($('revise-submit'), $('revise-working'));
+  const result = await reviseTrip(request);
+  done();
+
+  if (!result.ok) {
+    if (result.code === 'revisions_exhausted') {
+      state.plan = { ...state.plan, revisionsLeft: 0 };
+      save();
+      renderRevise();
+      return showNotice(errorText('revisions_exhausted'));
+    }
+    if (result.code === 'invalid_input') {
+      setReviseError(`Describe the change in 3 to ${REVISE_MAX} characters.`);
+      return showNotice(errorText('invalid_input'));
+    }
+    return handleError(result, 'plan', () => sendRevise(request));
+  }
+  const data = result.data;
+  if (data.type === 'declined') return showNotice(DECLINE_TEXT[data.reason] || DECLINE_TEXT.other);
+  if (data.type !== 'plan' || !data.plan) return showNotice(errorText('bad_model_output'));
+
+  state.plan = data;
+  state.reviseText = '';
+  showScreen('plan');
+  return undefined;
+}
+
 function renderPlan() {
   const data = state.plan;
   if (!data) return;
@@ -644,6 +719,7 @@ function renderPlan() {
 
   const model = state.model ? `${state.model}${state.mock ? ' (mock mode, canned answers)' : ''}` : 'unknown';
   $('plan-meta').textContent = `Generated ${localTime(data.generatedAt) || 'just now'} · Model: ${model}`;
+  renderRevise();
 }
 
 // ---- Errors -----------------------------------------------------------------------
@@ -657,6 +733,7 @@ function clearTrip() {
   state.questions = null;
   state.answers = {};
   state.plan = null;
+  state.reviseText = '';
   save();
 }
 
@@ -699,6 +776,7 @@ function resetToNewTrip() {
   state.questions = null;
   state.answers = {};
   state.plan = null;
+  state.reviseText = '';
   writeForm();
   clearFieldErrors();
   clearNotice();
@@ -770,6 +848,12 @@ function init() {
 
   $('plan-new').addEventListener('click', resetToNewTrip);
   $('plan-print').addEventListener('click', () => window.print());
+  $('revise-form').addEventListener('submit', onReviseSubmit);
+  $('f-revise').addEventListener('input', () => {
+    state.reviseText = $('f-revise').value;
+    updateReviseCounter();
+    save();
+  });
 
   // The button ships disabled in index.html, so a page whose script failed to load
   // cannot be submitted. It is usable from here on.

@@ -88,3 +88,4 @@ async function request(method, path, body) {
 export const getStatus = () => request('GET', '/api/status');
 export const startTrip = (body) => request('POST', '/api/trail/start', body);
 export const planTrip = (body) => request('POST', '/api/trail/plan', body);
+export const reviseTrip = (body) => request('POST', '/api/trail/revise', body);

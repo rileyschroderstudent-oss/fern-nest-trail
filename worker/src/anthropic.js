@@ -68,6 +68,12 @@ async function mockCall(stage, message) {
       break;
   }
 
+  if (stage === 'revise') {
+    // Task 11: mock revise returns the plan fixture with " (revised)" added to the title.
+    const json = structuredClone(PLAN_FIXTURE);
+    json.title = `${json.title} (revised)`;
+    return { kind: 'ok', json, usage };
+  }
   return { kind: 'ok', json: structuredClone(isQuestions ? QUESTIONS_FIXTURE : PLAN_FIXTURE), usage };
 }
 

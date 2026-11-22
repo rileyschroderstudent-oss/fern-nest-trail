@@ -13,7 +13,7 @@ import { callModel } from './anthropic.js';
 import { buildMessage } from './messages.js';
 import { verifyTurnstile } from './turnstile.js';
 import { shapeQuestions, shapePlan } from './postvalidate.js';
-import { validateStartBody, validatePlanBody, validateAnswers } from './validate.js';
+import { validateStartBody, validatePlanBody, validateAnswers, validateRevision } from './validate.js';
 import { issueSession, verifySession, hasUsableSecret } from './session.js';
 import {
   LOCAL_IP,
@@ -45,6 +45,7 @@ const ERROR_MESSAGES = {
   rate_limited: 'Too many requests.',
   invalid_session: 'This trip cannot be continued.',
   session_expired: 'This trip has expired.',
+  revisions_exhausted: 'No revisions left.',
   demo_closed: 'The demo is closed.',
   upstream_busy: 'Claude is busy. Try again in a minute.',
   upstream_error: 'Claude could not be reached.',
@@ -277,6 +278,11 @@ async function trailPlan(request, env, ctx, hash) {
   if (!shaped.ok) return errorResponse(env, request, 502, 'bad_model_output');
   if (shaped.value.type === 'declined') return json(env, request, 200, shaped.value);
 
+  return planResponse(env, request, { shaped, brief, questions, answers: answers.value, revs: 0, now });
+}
+
+// The 200 body for a plan from /plan or /revise (SPEC.md 4.4).
+async function planResponse(env, request, { shaped, brief, questions, answers, revs, now }) {
   return json(env, request, 200, {
     type: 'plan',
     plan: shaped.value,
@@ -285,9 +291,39 @@ async function trailPlan(request, env, ctx, hash) {
     travellers: brief.travellers,
     budgetPerPersonAud: brief.budgetPerPersonAud,
     generatedAt: isoSeconds(now),
-    session: await issueSession(env, { stage: 'plan', revs: 0, brief, questions, answers: answers.value }, now),
-    revisionsLeft: MAX_REVISIONS,
+    session: await issueSession(env, { stage: 'plan', revs, brief, questions, answers }, now),
+    revisionsLeft: MAX_REVISIONS - revs,
   });
+}
+
+// POST /api/trail/revise (SPEC.md 4.4, 4.8 and Task 11): a plan-stage token with revs
+// under the limit, the plan exactly as the page received it, and a change request.
+// revs in the token is the source of truth for how many revisions are left.
+async function trailRevise(request, env, ctx, hash) {
+  const read = await readJsonBody(request, BODY_LIMIT_BYTES.revise);
+  if (!read.ok) return invalidInput(env, request, read.fields);
+  const valid = validateRevision(read.body);
+  if (!valid.ok) return invalidInput(env, request, valid.fields);
+
+  const now = new Date();
+  const session = await verifySession(env, valid.value.session, { stage: 'plan', now });
+  if (!session.ok) {
+    return errorResponse(env, request, session.code === 'session_expired' ? 410 : 401, session.code);
+  }
+  const { brief, questions, answers, revs } = session.payload;
+  if (revs >= MAX_REVISIONS) return errorResponse(env, request, 409, 'revisions_exhausted');
+
+  const admission = await admit(env, hash, 'revise', now);
+  if (!admission.ok) return refused(env, request, admission);
+
+  const message = buildMessage('revise', { brief, questions, answers, plan: valid.value.plan, request: valid.value.request }, now);
+  const { result, shaped } = await runModel(env, ctx, 'revise', message, (raw) => shapePlan(raw, brief));
+  const failure = modelFailure(env, request, result.kind);
+  if (failure) return failure;
+  if (!shaped.ok) return errorResponse(env, request, 502, 'bad_model_output');
+  if (shaped.value.type === 'declined') return json(env, request, 200, shaped.value);
+
+  return planResponse(env, request, { shaped, brief, questions, answers, revs: revs + 1, now });
 }
 
 async function route(request, env, ctx) {
@@ -330,8 +366,7 @@ async function route(request, env, ctx) {
   }
   if (pathname === '/api/trail/plan') return trailPlan(request, env, ctx, hash);
 
-  // /api/trail/revise arrives in Task 11.
-  return errorResponse(env, request, 404, 'not_found');
+  return trailRevise(request, env, ctx, hash);
 }
 
 export default {
